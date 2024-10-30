@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>.slayy Decrypt</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Link to CSS -->
+   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
+   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap">
+   <style rel="stylesheet" href= "unified.css"></style><style>
+   /* General styling */
+   body, html {
+       margin: 0;
+       padding: 0;
+       background-color: #0d1117;
+       color: #c9d1d9;
+       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+   }
+   
+   /* Button Styling */
+   .button {
+       padding: 10px 15px;
+       border: none;
+       border-radius: 5px;
+       cursor: pointer;
+       transition: background-color 0.3s ease;
+   }
+   
+   .button.primary {
+       background-color: #58a6ff;
+       color: white;
+   }
+   
+   .button.secondary {
+       background-color: #f85149;
+       color: white;
+   }
+   
+   .button:hover {
+       background-color: #0d1117;
+       color: #58a6ff;
+   }</style>
+  <!-- Include external scripts -->
+  <!-- CryptoJS for decryption -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+</head>
+<body>
+  <!-- Main Content -->
+  <div id="mainContent" class="container">
+    <!-- Header -->
+    <h2 id="header" class="header">
+      Decrypt Your Message
+    </h2>
+
+    <!-- File Input -->
+    <div class="file-input-section">
+      <label for="encryptedImage">Select Encrypted Image:</label>
+      <input type="file" id="encryptedImage" accept="image/png" />
+    </div>
+
+    <!-- Encryption Key Input -->
+    <div class="key-section">
+      <label for="decryptionKey">Encryption Key:</label>
+      <input
+        type="text"
+        id="decryptionKey"
+        class="key-input"
+        placeholder="Enter your encryption key"
+      />
+    </div>
+
+    <!-- Control Buttons -->
+    <div class="control-buttons">
+      <button id="decryptButton" class="button primary">Decrypt Message</button>
+      <button id="clearStorageButton" class="button secondary">Clear Local Storage</button>
+    </div>
+
+    <!-- Decrypted Message Display -->
+    <div id="decryptedMessage" class="message-display"></div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <a href="README.md" target="_blank">README</a>
+    <span>© 2024 Gas-Lighting</span>
+  </footer>
+
+  <!-- Link to JavaScript -->
+  <script src="slayy.js"></script>
+</body>
+</html>

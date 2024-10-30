@@ -1,0 +1,118 @@
+/* General Styles */
+body,
+html {
+  margin: 0;
+  padding: 0;
+  background-color: #0d1117;
+  color: #c9d1d9;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* Header */
+.header {
+  font-size: 2.5rem;
+  text-align: center;
+  margin-bottom: 20px;
+  color: #58a6ff;
+  word-wrap: break-word;
+}
+
+/* File Input Section */
+.file-input-section {
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.file-input-section label {
+  font-size: 1rem;
+}
+
+.file-input-section input {
+  margin-top: 10px;
+  padding: 10px;
+  background-color: #161b22;
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+  border-radius: 5px;
+}
+
+/* Key Section */
+.key-section {
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.key-input {
+  padding: 10px;
+  margin-top: 10px;
+  background-color: #0d1117;
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+  border-radius: 5px;
+  width: 250px;
+}
+
+/* Control Buttons */
+.control-buttons {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.button {
+  padding: 10px 15px;
+  margin: 5px;
+  background-color: #238636;
+  color: #ffffff;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.button.secondary {
+  background-color: #f85149;
+}
+
+.button.primary {
+  background-color: #58a6ff;
+}
+
+.button:hover {
+  background-color: #0d1117;
+  color: #58a6ff;
+  border: 1px solid #58a6ff;
+}
+
+/* Decrypted Message Display */
+.message-display {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 1.2rem;
+  color: #3fb950; /* Green for successful decryption */
+}
+
+/* Footer */
+.footer {
+  background-color: #161b22;
+  color: #8b949e;
+  text-align: center;
+  padding: 10px;
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+}
+
+.footer a {
+  color: #58a6ff;
+  text-decoration: none;
+  margin-right: 15px;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}

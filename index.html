@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GSL Encryption</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="styles.css">
+    <script src="https://cdn.rawgit.com/eligrey/FileSaver.js/5ed507ef8aa53d8ecfea96d96bc7214cd2476fd2/FileSaver.min.js"></script>
+    <script src="https://cdn.rawgit.com/eligrey/canvas-toBlob.js/f1a01896135ab378aa5c0118eadd81da55e698d8/canvas-toBlob.js"></script>
+    <script src="https://cdn.rawgit.com/eligrey/Blob.js/0cef2746414269b16834878a8abc52eb9d53e6bd/Blob.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.0.0/crypto-js.min.js"></script>
+<script src="jQueryAssets/jquery-1.11.1.min.js"></script>
+    <script src="jQueryAssets/jquery.ui-1.10.4.progressbar.min.js"></script>
+<script src="jQueryAssets/SpryDOMUtils.js"></script>
+    <script src="index.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+<style>
+    body, html {
+        margin: 20;
+        padding: 20%;
+        height: 100%;
+        background: #000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        color: darkslategrey;
+        font-family: Arial, sans-serif;
+    }
+
+    #typingInput {
+        background-color: #1a202c;
+        color: green;
+        border: none;
+        padding: 1rem;
+        resize: none;
+        width: 100%;
+        max-width: 500px;
+    }
+
+    .cell {
+        width: 3rem;
+        height: 3rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+    }
+
+    .bg-red-700 {
+        background-color: red;
+    }
+
+    .bg-green-500 {
+        background-color: green;
+    }
+
+    #gameboard {
+        display: grid;
+        grid-template-columns: repeat(8, 1fr);
+        gap: 10px;
+        margin-bottom: 20px;
+        max-width: 80vw;
+    }
+
+    .matrix {
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        width: 100%;
+        height: 200px;
+        overflow: hidden;
+        white-space: nowrap;
+        position: relative;
+    }
+
+    .matrix-column {
+        position: absolute;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .matrix-column span {
+        font-size: 20px;
+        animation: fall linear infinite;
+    }
+
+    @keyframes fall {
+        0% {
+            opacity: 0;
+            transform: translateY(-100%);
+        }
+
+        100% {
+            opacity: 1;
+            transform: translateY(100%);
+        }
+    }
+
+    .center-image {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .hidden {
+        display: none;
+    }
+
+    button {
+        cursor: pointer;
+    }
+
+    button:hover {
+        opacity: 1.0;
+    }
+
+    .gradient-text span {
+        display: inline-block;
+        transition: all 0.5s;
+    }
+
+    .hidden {
+        display: none;
+    }
+
+    .faded {
+        opacity: 0.2;
+        transition: opacity 0.5s;
+    }
+
+    .refresh-button {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+    }
+
+    .refresh-button img {
+        width: 30px;
+        height: 30px;
+    }
+
+    .matrix {
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        width: 100%;
+        height: 200px;
+        overflow: hidden;
+        white-space: nowrap;
+        position: relative;
+    }
+
+    .matrix-column {
+        position: absolute;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .matrix-column span {
+        font-size: 20px;
+        animation: fall linear infinite;
+    }
+
+    @keyframes fall {
+        0% {
+            opacity: 0;
+            transform: translateY(-100%);
+        }
+
+        100% {
+            opacity: 1;
+            transform: translateY(100%);
+        }
+    }
+
+    .button-outline {
+        border: 2px solid white;
+        transition: background-color 0.3s, border-color 0.3s;
+    }
+
+    .button-outline:hover {
+        background-color: white;
+        color: black;
+    }
+</style>
+
+    
+    <link href="jQueryAssets/jquery.ui.core.min.css" rel="stylesheet" type="text/css">
+    <link href="jQueryAssets/jquery.ui.theme.min.css" rel="stylesheet" type="text/css">
+    <link href="jQueryAssets/jquery.ui.progressbar.min.css" rel="stylesheet" type="text/css">
+</head>
+<body>
+    <button class="refresh-button" id="button1">
+        <img src="https://www.drupal.org/files/styles/grid-4-2x/public/Reload_mark_bg_RGB_black_x8.png?&amp;" w="40" h="40" alt="Refresh">
+    </button>
+<div class="flex flex-col items-center text-center">
+
+    <h2 class="text-4xl sm:text-5xl font-bold tracking-tight gradient-text" id="dynamic-header">
+            <span id="first-part" class="text-red-500">Choose and</span>
+            <span id="second-part">hear the color</span>
+        </h2>
+        <div id="typing-area" class="mt-8">
+            <textarea id="typingInput" class="w-80 h-24 bg-gray-800 text-white border-none p-2" placeholder="Type your message here..."></textarea>
+        </div>
+      <div id="wpmCounter" class="mt-2"></div>
+<div id="gameboard" class="grid grid-cols-8 gap-2 mt-4"></div>
+        <select id="songNumber" class="mt-4 p-4 bg-red-600 rounded">
+            <option value="">Select a song</option>
+            <option value="1">Tetris Theme</option>
+            <option value="2">Westworld Theme</option>
+            <option value="3">Interstellar Theme</option>
+            <option value="4">Happy Violence (short)</option>
+            <option value="5">Dancing Queen</option>
+            <option value="6">Good Riddance (Time of Your Life)</option>
+            <option value="7">Death Note - L's Theme</option>
+            <option value="8">Bohemian Rhapsody</option>
+            <option value="9">Only Time</option>
+            <option value="10">Holding Out for a Hero</option>
+            <option value="11">Hypnotize</option>
+        </select>
+        <button id="encryptButton" class="mt-4 p-4 bg-blue-600 rounded button-outline">Encrypt and Play MIDI</button>
+        <button id="downloadButton" class="mt-4 p-4 bg-green-600 rounded hidden button-outline">Download SVG</button>
+        <button id="decompileButton" class="mt-4 p-4 bg-yellow-600 rounded button-outline">Decompile .slayy</button>
+        <div id="Results" class="mt-4 hidden">
+            <textarea id="ResultsText" class="w-80 h-24 bg-gray-800 text-white border-none p-2" placeholder="Encrypted message..." disabled=""></textarea>
+        </div>
+        <div id="matrix" class="matrix mt-8"></div>
+    </div>
+
+    <script src="https://unpkg.com/tone@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        const midiFiles = [
+            "https://irp.cdn-website.com/cee417da/audio/Tetris_-_A_Theme.mid",
+            "https://irp.cdn-website.com/cee417da/audio/Ramin_Djawadi_-_Westworld_Theme.mid",
+            "https://irp.cdn-website.com/cee417da/audio/CornChaseIntersteller.mid",
+            "https://irp.cdn-website.com/cee417da/audio/Dada_Life_-_Happy_Violence.mid",
+            "https://irp.cdn-website.com/cee417da/audio/DancingQueen_(1).mid",
+            "https://irp.cdn-website.com/cee417da/audio/GoodRiddance(TimeOfYourLife)(3).mid",
+            "https://irp.cdn-website.com/cee417da/audio/Death_Note_-_L-s_Theme.mid",
+            "https://irp.cdn-website.com/cee417da/audio/Bohemian-Rhapsody-1.mid",
+            "https://irp.cdn-website.com/cee417da/audio/OnlyTime.mid",
+            "https://irp.cdn-website.com/cee417da/audio/Holding-Out-For-A-Hero-1.mid",
+            "https://irp.cdn-website.com/cee417da/audio/Hypnotize_(2).mid",
+        ];
+
+        const ROWS = 8;
+        const COLUMNS = 8;
+        let gameboard = Array(ROWS).fill().map(() => Array(COLUMNS).fill(false));
+        let typingStartTime, typingEndTime, wpm;
+        let firstPartTyped = false;
+        let currentMessage = '';
+        let wpmValue = 0;
+
+        function calculateWPM() {
+            const typedText = document.getElementById("typingInput").value.trim().split(/\s+/).length;
+            const timeDiff = (typingEndTime - typingStartTime) / 60000;
+            wpmValue = (typedText / timeDiff).toFixed(2);
+            document.getElementById("wpmCounter").innerText = `WPM: ${wpmValue}`;
+        }
+
+        document.getElementById("typingInput").addEventListener("input", function() {
+            if (!typingStartTime) typingStartTime = new Date().getTime();
+            typingEndTime = new Date().getTime();
+            const typedText = document.getElementById("typingInput").value;
+            currentMessage = typedText;
+            updateHeader(currentMessage);
+            if (!firstPartTyped) {
+                firstPartTyped = true;
+            }
+        });
+
+        function updateHeader(message) {
+            const header = document.getElementById("dynamic-header");
+            header.innerHTML = ""; // Clear previous content
+            for (let i = 0; i < message.length; i++) {
+                const span = document.createElement("span");
+                span.textContent = message[i];
+                span.style.color = i % 2 === 0 ? "red" : "white"; // Alternate colors
+                header.appendChild(span);
+            }
+        }
+
+        function initializeGameboard() {
+            const gameboardElement = document.getElementById("gameboard");
+            gameboardElement.innerHTML = "";
+            for (let i = 0; i < ROWS; i++) {
+                for (let j = 0; j < COLUMNS; j++) {
+                    const cell = document.createElement("div");
+                    cell.classList.add("cell", "w-12", "h-12", "bg-red-700", "flex", "items-center", "justify-center", "text-lg", "font-bold", "cursor-pointer");
+                    cell.dataset.row = i;
+                    cell.dataset.col = j;
+                    cell.addEventListener('click', () => handleCellClick(i, j));
+                    gameboardElement.appendChild(cell);
+                }
+            }
+        }
+
+        function handleCellClick(row, col) {
+            toggleCell(row, col);
+            updateGameboard();
+            const alteredMessage = applyGridStateToMessage(currentMessage);
+            updateHeader(alteredMessage);
+            const binaryMessage = alteredMessage.split('').map(char => char.charCodeAt(0).toString(2).padStart(8, '0')).join('');
+            updateMatrix(binaryMessage, false);
+        }
+
+        function toggleCell(row, col) {
+            gameboard[row][col] = !gameboard[row][col];
+        }
+
+        function updateGameboard() {
+            const cells = document.querySelectorAll(".cell");
+            cells.forEach(cell => {
+                const row = parseInt(cell.dataset.row);
+                const col = parseInt(cell.dataset.col);
+                const color = gameboard[row][col] ? getGreenVariation(row, col) : getRedVariation(row, col);
+                cell.style.backgroundColor = color;
+            });
+        }
+
+        function getRedVariation(row, col) {
+            const baseRed = 255;
+            const redVariation = Math.floor(Math.random() * 1);
+            return `rgb(${baseRed}, ${redVariation}, ${redVariation})`;
+        }
+
+        function getGreenVariation(row, col) {
+            const baseGreen = 255;
+            const greenVariation = Math.floor(Math.random() * 1);
+            return `rgb(${greenVariation}, ${baseGreen}, ${greenVariation})`;
+        }
+
+        function applyGridStateToMessage(message) {
+            let result = '';
+            for (let i = 0; i < message.length; i++) {
+                const charCode = message.charCodeAt(i);
+                const row = i % ROWS;
+                const col = (i / ROWS) % COLUMNS;
+                const gridState = gameboard[row][col] ? 1 : 0;
+                result += String.fromCharCode(charCode ^ gridState);
+            }
+            return result;
+        }
+
+        function playMIDI(songNumber) {
+            const midiFile = midiFiles[songNumber - 1];
+            document.getElementById("typingInput").disabled = true;
+            // Fade out elements not needed during playback
+            document.getElementById("typing-area").classList.add("hidden");
+            document.getElementById("songNumber").classList.add("faded");
+            document.getElementById("encryptButton").classList.add("faded");
+            fetch(midiFile)
+                .then(response => response.arrayBuffer())
+                .then(data => {
+                    const midi = new Midi(data);
+                    const synth = new Tone.PolySynth(Tone.Synth, {
+                        envelope: {
+                            attack: 0.03,
+                            decay: 0.1,
+                            sustain: 0.5,
+                            release: 1,
+                            oscillator: {
+                                type: "sine",
+                            },
+                        },
+                    }).toDestination();
+                    midi.tracks.forEach(track => {
+                        track.notes.forEach(note => {
+                            const midiNumber = note.midi % 64;
+                            const row = Math.floor(midiNumber / 8);
+                            const col = midiNumber % 8;
+                            Tone.Transport.schedule(time => {
+                                synth.triggerAttackRelease(note.name, note.duration, time);
+                                handleCellClick(row, col);
+                                const progress = (Tone.Transport.seconds / midi.duration) * 100;
+                                const xorResult = applyXOR(currentMessage, note.name);
+                                updateHeader(xorResult);
+                                const binaryMessage = xorResult.split('').map(char => char.charCodeAt(0).toString(2).padStart(8, '0')).join('');
+                                updateMatrix(binaryMessage, false);
+                            }, note.time);
+                        });
+                    });
+                    Tone.Transport.start();
+                    Tone.Transport.scheduleOnce(() => {
+                        document.getElementById("typingInput").disabled = false;
+                        document.getElementById("Results").classList.remove("hidden");
+                        document.getElementById("ResultsText").value = base64Encode(document.getElementById("typingInput").value);
+                        document.getElementById("downloadButton").classList.remove("hidden"); // Show the download button
+                        prepareSVGForDownload();
+                        const binaryMessage = applyXORToBinary(currentMessage, "");
+                        updateMatrix(binaryMessage, true);
+                        // Revert fading after song finishes
+                        document.getElementById("typing-area").classList.remove("hidden");
+                        document.getElementById("songNumber").classList.remove("faded");
+                        document.getElementById("encryptButton").classList.remove("faded");
+                    }, midi.duration);
+                });
+        }
+
+        function applyXOR(message, midiNote) {
+            let xorResult = "";
+            for (let i = 0; i < message.length; i++) {
+                xorResult += String.fromCharCode(message.charCodeAt(i) ^ midiNote.charCodeAt(i % midiNote.length));
+            }
+            return xorResult;
+        }
+
+        function applyXORToBinary(message, midiNote) {
+            let xorResult = applyXOR(message, midiNote);
+            return xorResult.split('').map(char => char.charCodeAt(0).toString(2).padStart(8, '0')).join('');
+        }
+
+        document.getElementById("encryptButton").addEventListener("click", function() {
+            const message = document.getElementById("typingInput").value;
+            if (!message) {
+                alert("Please type a message.");
+                return;
+            }
+            const songNumber = parseInt(document.getElementById("songNumber").value);
+            if (!songNumber || songNumber < 1 || songNumber > midiFiles.length) {
+                alert("Please choose a valid song number.");
+                return;
+            }
+            calculateWPM();
+            currentMessage = message;
+            playMIDI(songNumber);
+            const binaryMessage = message.split('').map(char => char.charCodeAt(0).toString(2).padStart(8, '0')).join('');
+            updateMatrix(binaryMessage, false);
+        });
+
+        function base64Encode(str) {
+            const utf8Array = new TextEncoder().encode(str);
+            let base64String = "";
+            const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+            for (let i = 0; i < utf8Array.length; i += 3) {
+                const byte1 = utf8Array[i];
+                const byte2 = i + 1 < utf8Array.length ? utf8Array[i + 1] : 0;
+                const byte3 = i + 2 < utf8Array.length ? utf8Array[i + 2] : 0;
+                const base64Char1 = characters.charAt(byte1 >> 2);
+                const base64Char2 = characters.charAt(((byte1 & 0x03) << 4) | (byte2 >> 4));
+                const base64Char3 = i + 1 < utf8Array.length ? characters.charAt(((byte2 & 0x0f) << 2) | (byte3 >> 6)) : "=";
+                const base64Char4 = i + 2 < utf8Array.length ? characters.charAt(byte3 & 0x3f) : "=";
+                base64String += base64Char1 + base64Char2 + base64Char3 + base64Char4;
+            }
+            return base64String;
+        }
+
+        function encryptMessage(message) {
+            const key = CryptoJS.enc.Utf8.parse('your-encryption-key');
+            const iv = CryptoJS.enc.Utf8.parse('your-iv');
+            const encrypted = CryptoJS.AES.encrypt(message + wpmValue, key, {
+                iv: iv
+            }); // added the WPM to the message before encryption
+            return encrypted.toString();
+        }
+
+        document.getElementById("downloadButton").addEventListener("click", function () {
+    // Encrypt message and convert it to binary for SVG display
+    const binaryMessage = applyXORToBinary(currentMessage, ""); // Use your XOR function to get binary output
+    const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600">
+        <text x="10" y="40" font-size="24" fill="red">${binaryMessage}</text>
+    </svg>`;
+
+    // Encrypt the content from the ResultsText textarea
+    const encryptedMessage = encryptMessage(document.getElementById("ResultsText").value);
+
+    // Combine SVG with encrypted message in a custom `.slayy` format
+    const slayyFileContent = `${svgContent}\n<!--${encryptedMessage}-->`;
+    const blob = new Blob([slayyFileContent], { type: 'text/plain;charset=utf-8' });
+
+    // Save file as `.slayy`
+    saveAs(blob, "encrypted_image.slayy");
+});
+
+document.getElementById("decompileButton").addEventListener("click", function () {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.slayy';
+    fileInput.onchange = function (event) {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const content = e.target.result;
+
+                // Extract SVG content and encrypted message
+                const svgEndIndex = content.indexOf('<!--');
+                const svgContent = content.substring(0, svgEndIndex);
+                const encryptedMessage = content.substring(svgEndIndex + 4, content.indexOf('-->', svgEndIndex));
+
+                // Decrypt the message and display it
+                const decryptedMessage = decryptMessage(encryptedMessage);
+                document.getElementById('svgContainer').innerHTML = svgContent;
+                document.getElementById('ResultsText').value = decryptedMessage;
+                document.getElementById('Results').classList.remove("hidden");
+            };
+            reader.readAsText(file);
+        }
+    };
+    fileInput.click();
+});
+
+// AES encryption for the message
+function encryptMessage(message) {
+    const key = CryptoJS.enc.Utf8.parse('your-encryption-key'); // Set a secure encryption key
+    const iv = CryptoJS.enc.Utf8.parse('your-iv'); // Set an initialization vector (IV)
+    const encrypted = CryptoJS.AES.encrypt(message, key, { iv: iv });
+    return encrypted.toString();
+}
+
+// AES decryption for the message
+function decryptMessage(encryptedMessage) {
+    const key = CryptoJS.enc.Utf8.parse('your-encryption-key'); // Match the encryption key
+    const iv = CryptoJS.enc.Utf8.parse('your-iv'); // Match the IV used in encryption
+    const decrypted = CryptoJS.AES.decrypt(encryptedMessage, key, { iv: iv });
+    return decrypted.toString(CryptoJS.enc.Utf8);
+}
+
+// XOR encryption to binary
+function applyXORToBinary(message, key) {
+    let xorResult = "";
+    for (let i = 0; i < message.length; i++) {
+        xorResult += String.fromCharCode(message.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+    }
+    return xorResult
+        .split('')
+        .map(char => char.charCodeAt(0).toString(2).padStart(8, '0'))
+        .join(' ');
+}
+        function updateMatrix(binaryMessage, makeStatic) {
+            const matrix = document.getElementById('matrix');
+            matrix.innerHTML = '';
+            const columns = Math.floor(matrix.offsetWidth / 20);
+            const rows = Math.floor(matrix.offsetHeight / 20);
+            let binaryIndex = 0;
+            for (let i = 0; i < columns; i++) {
+                const column = document.createElement('div');
+                column.className = 'matrix-column';
+                column.style.left = `${i * 20}px`;
+                for (let j = 0; j < rows; j++) {
+                    const span = document.createElement('span');
+                    span.textContent = binaryMessage[binaryIndex % binaryMessage.length];
+                    span.style.color = binaryMessage[binaryIndex % binaryMessage.length] === '0' ? 'red' : 'green';
+                    if (!makeStatic) {
+                        span.style.animationDelay = `${Math.random() * 1}s`;
+                    } else {
+                        span.style.animation = 'none';
+                    }
+                    column.appendChild(span);
+                    binaryIndex++;
+                }
+                matrix.appendChild(column);
+            }
+        }
+
+        function toggleVisibility() {
+            const moreInfo = document.getElementById("moreInfo");
+            if (moreInfo.style.display === "none" || moreInfo.style.display === "") {
+                moreInfo.style.display = "block";
+            } else {
+                moreInfo.style.display = "none";
+            }
+        }
+
+        initializeGameboard();
+        updateGameboard();
+    </script>
+    <center>
+        <button id="button2">INFORMATION</button>
+        <div id="moreInfo" class="hidden">
+            <p>
+                This project is an extension of the concept from
+                <a href="https://slayy1.vercel.app">Slayybit Image Embed</a>
+                , which explores innovative ways of embedding messages within images using MIDI files. The project dynamically alters the message based on the MIDI file being played and utilizes the XOR operation for real-time binary transformation. The final output is saved as a .slayy file, which encapsulates both visual and encrypted data.
+            </p>
+            <p>
+                The core idea here involves using a MIDI Synth to dynamically alter the message based on the MIDI file being played. This was inspired by the
+                <a href="/home.html">MIDI Synth</a>
+                design, utilizing the
+                <a href="https://github.com/Tonejs/Midi">Tone.js MIDI library</a>
+                for creating and manipulating MIDI files.
+            </p>
+            <p>
+                In this project, as the song plays, the text is XORed with the MIDI notes in real-time, creating a unique binary representation. This binary data is then visualized and embedded within an SVG image. The final image, combined with the encrypted message, is saved as a .slayy file, a format designed to encapsulate both visual and encrypted data.
+            </p>
+            <p>
+                The term "Slayy" phonetically represents the process 'Ghidra's Sleigh', openly available to use on the NSA's GitHub, which uses various techniques to utilize binary lost data, embedding and transforming data through encryption and visualization techniques. This project is a nod to the importance of secure and hidden data transmission.
+            </p>
+            <p>
+                More information and the
+                <a href="https://github.com/musha1140/key-mid" target="_blank" class="mt-4 text-blue-500">
+                    GitHub source
+                </a>
+                code.
+            </p>
+            <p>
+                <a href="https://keyjson.replit.app/mp3.html" target="_blank" class="mt-4 text-blue-500">
+                    Mp3 Synth
+                </a>
+                is another related project that demonstrates similar concepts with MP3 files.
+            </p>
+        </div>
+    </center>
+<script type="text/javascript">
+$(function() {
+	$( "#Progressbar1" ).progressbar(); 
+});
+    </script>
+</body>
+</html>

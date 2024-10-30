@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GSL Encryption</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="style.css">
+    <script src="https://cdn.rawgit.com/eligrey/FileSaver.js/5ed507ef8aa53d8ecfea96d96bc7214cd2476fd2/FileSaver.min.js"></script>
+    <script src="https://cdn.rawgit.com/eligrey/canvas-toBlob.js/f1a01896135ab378aa5c0118eadd81da55e698d8/canvas-toBlob.js"></script>
+    <script src="https://cdn.rawgit.com/eligrey/Blob.js/0cef2746414269b16834878a8abc52eb9d53e6bd/Blob.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.0.0/crypto-js.min.js"></script>
+    <script src="jQueryAssets/jquery-1.11.1.min.js"></script>
+    <script src="jQueryAssets/jquery.ui-1.10.4.progressbar.min.js"></script>
+    <script src="jQueryAssets/SpryDOMUtils.js"></script>
+    <script src="index.js"></script>
+    <style>
+        body, html {
+            margin: 20;
+            padding: 20%;
+            height: 100%;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+
+        #typingInput {
+            background-color: #1a202c;
+            color: green;
+            border: none;
+            padding: 1rem;
+            resize: none;
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .cell {
+            width: 3rem;
+            height: 3rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .bg-red-700 {
+            background-color: red;
+        }
+
+        .bg-green-500 {
+            background-color: green;
+        }
+
+        #gameboard {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+            max-width: 80vw;
+        }
+
+        .matrix {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            width: 100%;
+            height: 200px;
+            overflow: hidden;
+            white-space: nowrap;
+            position: relative;
+        }
+
+        .matrix-column {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .matrix-column span {
+            font-size: 20px;
+            animation: fall linear infinite;
+        }
+
+        @keyframes fall {
+            0% {
+                opacity: 0;
+                transform: translateY(-100%);
+            }
+
+            100% {
+                opacity: 1;
+                transform: translateY(100%);
+            }
+        }
+
+        .center-image {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        button {
+            cursor: pointer;
+        }
+
+        button:hover {
+            opacity: 1.0;
+        }
+
+        .gradient-text span {
+            display: inline-block;
+            transition: all 0.5s;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .faded {
+            opacity: 0.2;
+            transition: opacity 0.5s;
+        }
+
+        .refresh-button {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+        }
+
+        .refresh-button img {
+            width: 30px;
+            height: 30px;
+        }
+
+        .button-outline {
+            border: 2px solid white;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+
+        .button-outline:hover {
+            background-color: white;
+            color: black;
+        }
+    </style>
+    <link href="jQueryAssets/jquery.ui.core.min.css" rel="stylesheet" type="text/css">
+    <link href="jQueryAssets/jquery.ui.theme.min.css" rel="stylesheet" type="text/css">
+    <link href="jQueryAssets/jquery.ui.progressbar.min.css" rel="stylesheet" type="text/css">
+</head>
+<body>
+    <div class="flex flex-col items-center text-center">
+        <h2 class="text-4xl sm:text-5xl font-bold tracking-tight gradient-text" id="dynamic-header">
+            <span id="first-part" class="text-red-500">Choose and</span>
+            <span id="second-part">hear the color</span>
+        </h2>
+        <div id="typing-area" class="mt-8">
+            <textarea id="typingInput" class="w-80 h-24 bg-gray-800 text-white border-none p-2" placeholder="Type your message here..."></textarea>
+        </div>
+        <div id="wpmCounter" class="mt-2"></div>
+        <div id="gameboard" class="grid grid-cols-8 gap-2 mt-4"></div>
+        <select id="songNumber" class="mt-4 p-4 bg-red-600 rounded">
+            <option value="">Select a song</option>
+            <option value="1">Tetris Theme</option>
+            <option value="2">Westworld Theme</option>
+            <option value="3">Interstellar Theme</option>
+            <option value="4">Happy Violence (short)</option>
+            <option value="5">Dancing Queen</option>
+            <option value="6">Good Riddance (Time of Your Life)</option>
+            <option value="7">Death Note - L's Theme</option>
+            <option value="8">Bohemian Rhapsody</option>
+            <option value="9">Only Time</option>
+            <option value="10">Holding Out for a Hero</option>
+            <option value="11">Hypnotize</option>
+        </select>
+        <button id="encryptButton" class="mt-4 p-4 bg-blue-600 rounded button-outline">Encrypt and Play MIDI</button>
+        <button id="downloadButton" class="mt-4 p-4 bg-green-600 rounded hidden button-outline">Download SVG</button>
+        <button id="decompileButton" class="mt-4 p-4 bg-yellow-600 rounded button-outline">Decompile .slayy</button>
+        <div id="Results" class="mt-4 hidden"></div>
+            <textarea id="ResultsText" class="w-80 h-24 bg-gray-800 text-white border-none p-2" placeholder="Encrypted message..." disabled=""></textarea>
+        </div>
+        <div id="matrix" class="matrix mt-8"></div>
+    </div>
+
+    <script src="https://unpkg.com/tone@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        const midiFiles = [
+            "https://irp.cdn-website.com/cee417da/audio/Tetris_-_A_Theme.mid",
+            "https://irp.cdn-website.com/cee417da/audio/Ramin_Djawadi_-_Westworld_Theme.mid",
+            "https://irp.cdn-website.com/cee417da/audio/CornChaseIntersteller.mid",
+            "https://irp.cdn-website.com/cee417da/audio/Dada_Life_-_Happy_Violence.mid",
+            "https://irp.cdn-website.com/cee417da/audio/DancingQueen_(1).mid",
+            "https://irp.cdn-website.com/cee417da/audio/GoodRiddance(TimeOfYourLife)(3).mid",
+            "https://irp.cdn-website.com/cee417da/audio/Death_Note_-_L-s_Theme.mid",
+            "https://irp.cdn-website.com/cee417da/audio/Bohemian-Rhapsody-1.mid",
+            "https://irp.cdn-website.com/cee417da/audio/OnlyTime.mid",
+            "https://irp.cdn-website.com/cee417da/audio/Holding-Out-For-A-Hero-1.mid",
+            "https://irp.cdn-website.com/cee417da/audio/Hypnotize_(2).mid",
+        ];
+        const ROWS = 8, COLUMNS = 8;
+        let gameboard = Array(ROWS).fill().map(() => Array(COLUMNS).fill(false));
+        let typingStartTime, typingEndTime, wpmValue = 0, currentMessage = '';
+
+        // Initialize Gameboard
+        function initializeGameboard() {
+            const gameboardElement = document.getElementById("gameboard");
+            gameboardElement.innerHTML = "";
+            for (let i = 0; i < ROWS; i++) {
+                for (let j = 0; j < COLUMNS; j++) {
+                    const cell = document.createElement("div");
+                    cell.classList.add("cell");
+                    cell.dataset.row = i;
+                    cell.dataset.col = j;
+                    cell.addEventListener('click', () => toggleCell(i, j));
+                    gameboardElement.appendChild(cell);
+                }
+            }
+        }
+        
+        // Update Cells
+        function toggleCell(row, col) {
+            gameboard[row][col] = !gameboard[row][col];
+        }
+
+        // Encryption & MIDI Play
+        function playMIDI(songNumber) {
+            Tone.start().then(() => {
+                loadMIDIFile(songNumber)
+                    .then(midi => {
+                        const synth = new Tone.PolySynth(Tone.Synth).toDestination();
+                        midi.tracks.forEach(track => {
+                            track.notes.forEach(note => {
+                                Tone.Transport.schedule(time => {
+                                    synth.triggerAttackRelease(note.name, note.duration, time);
+                                    const xorResult = applyXOR(currentMessage, note.name);
+                                    const binaryMessage = xorResult.split('').map(char => char.charCodeAt(0).toString(2).padStart(8, '0')).join('');
+                                    updateGameboard(binaryMessage);
+                                }, note.time);
+                            });
+                        });
+                        Tone.Transport.start();
+                    })
+                    .catch(error => console.error("Failed to load the MIDI file.", error));
+            });
+        }
+
+        function loadMIDIFile(songNumber) {
+            return fetch(midiFiles[songNumber - 1])
+                .then(response => response.arrayBuffer())
+                .then(data => new Midi(data))
+                .catch(error => console.error("Failed to load the MIDI file.", error));
+        }
+
+        function applyXOR(message, midiNote) {
+            let xorResult = "";
+            for (let i = 0; i < message.length; i++) {
+                xorResult += String.fromCharCode(message.charCodeAt(i) ^ midiNote.charCodeAt(i % midiNote.length) ^ (i % wpmValue));
+            }
+            return xorResult;
+        }
+
+        // Download SVG
+        document.getElementById("downloadButton").addEventListener("click", function () {
+            const binaryMessage = currentMessage.split('').map(char => char.charCodeAt(0).toString(2).padStart(8, '0')).join('');
+            const svgContent = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="600" height="600">
+                <text x="10" y="40" font-size="24" fill="red">${binaryMessage}</text>
+            </svg>
+            <!-- Instructions: Rename this file as '.slayy' and upload to decrypt -->`;
+            const blob = new Blob([svgContent], { type: "image/svg+xml" });
+            saveAs(blob, "encrypted_image.svg");
+        });
+
+        // Encrypt and play on button click
+        document.getElementById("encryptButton").addEventListener("click", function () {
+            const message = document.getElementById("typingInput").value;
+            const songNumber = 1; // Can update dynamically with selection
+            if (message) {
+                currentMessage = message;
+                playMIDI(songNumber);
+            }
+        });
+
+        initializeGameboard(); // Initialize board on load
+    </script>
+</body>
+</html>
