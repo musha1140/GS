@@ -477,7 +477,7 @@ const blob = new Blob([slayyFileContent], { type: 'text/plain;charset=utf-8' });
 
 // Save file as `.slayy`
 const binaryMessage = "yourFileName"; // Ensure binaryMessage is defined
-saveAs(blob, `${binaryMessage}.slayy`);
+        saveAs(blob, `${fileName}.slayy`);
 
 document.getElementById("decompileButton").addEventListener("click", function () {
     const fileInput = document.createElement('input');
