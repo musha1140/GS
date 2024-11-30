@@ -471,13 +471,13 @@
     // Encrypt the content from the ResultsText textarea
     const encryptedMessage = encryptMessage(document.getElementById("ResultsText").value);
 
-    // Combine SVG with encrypted message in a custom `.slayy` format
-    const slayyFileContent = `${svgContent}\n<!--${encryptedMessage}-->`;
-    const blob = new Blob([slayyFileContent], { type: 'text/plain;charset=utf-8' });
+   // Combine SVG with encrypted message in a custom `.slayy` format
+const slayyFileContent = `${svgContent}\n<!--${encryptedMessage}-->`;
+const blob = new Blob([slayyFileContent], { type: 'text/plain;charset=utf-8' });
 
-    // Save file as `.slayy`
-    saveAs(blob, "encrypted_image.slayy");
-});
+// Save file as `.slayy`
+const binaryMessage = "yourFileName"; // Ensure binaryMessage is defined
+saveAs(blob, `${binaryMessage}.slayy`);
 
 document.getElementById("decompileButton").addEventListener("click", function () {
     const fileInput = document.createElement('input');
