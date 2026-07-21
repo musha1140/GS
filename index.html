@@ -1,626 +1,1518 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GSL Encryption</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <link rel="stylesheet" type="text/css" href="styles.css">
-    <script src="https://cdn.jsdelivr.net/gh/eligrey/FileSaver.js@5ed507ef8aa53d8ecfea96d96bc7214cd2476fd2/FileSaver.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/eligrey/canvas-toBlob.js@f1a01896135ab378aa5c0118eadd81da55e698d8/canvas-toBlob.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/eligrey/Blob.js@0cef2746414269b16834878a8abc52eb9d53e6bd/Blob.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.0.0/crypto-js.min.js"></script>
-<script src="jQueryAssets/jquery-1.11.1.min.js"></script>
-    <script src="jQueryAssets/jquery.ui-1.10.4.progressbar.min.js"></script>
-<script src="jQueryAssets/SpryDOMUtils.js"></script>
-    <script src="index.js"></script>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-<style>
-    body, html {
-        margin: 20;
-        padding: 20%;
-        height: 100%;
-        background: #000;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        flex-direction: column;
-        color: darkslategrey;
-        font-family: Arial, sans-serif;
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>GSL Encryption</title>
+  <meta name="description" content="XOR a message — or any file — against a constant MIDI keystream, watch it play out on a 64-cell grid, and share it as a syzygy QR code.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23030303'/%3E%3Ctext x='2' y='12' font-family='monospace' font-size='10' fill='%2334d399'%3E1%3C/text%3E%3Ctext x='8.5' y='12' font-family='monospace' font-size='10' fill='%23ef4444'%3E0%3C/text%3E%3C/svg%3E">
+
+  <!-- Pinned versions on purpose: the v1 page died of `@latest` rot.
+       tone 15.1.22 / @tonejs/midi 2.0.28 / qrcode-generator 1.4.4 are current (checked 2026-07-21). -->
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.3"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tone@15.1.22/build/Tone.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.28/build/Midi.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+
+  <style type="text/tailwindcss">
+    @theme {
+      /* Hermetic font stacks (same approach as the gas-lighting portfolio):
+         real faces render if the host site loads them, system fallbacks otherwise. */
+      --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+    }
+  </style>
+
+  <style>
+    /* Painted before the Tailwind runtime compiles — no white flash. */
+    html, body { background: #030303; }
+    body { padding-bottom: max(0px, env(safe-area-inset-bottom)); }
+
+    /* Touch QoL: no gray tap flashes, no double-tap zoom on controls, no
+       accidental text selection on the play surfaces. */
+    button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+    #gameboard, #qrCanvas, #progressBar, .cell {
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
     }
 
-    #typingInput {
-        background-color: #1a202c;
-        color: green;
-        border: none;
-        padding: 1rem;
-        resize: none;
-        width: 100%;
-        max-width: 500px;
+    #dynamicHeader { white-space: pre-wrap; word-break: break-word; }
+    .hdr-a { color: #ef4444; }
+    .hdr-b { color: #fafafa; }
+    #dynamicHeader.playing {
+      text-shadow: 0.04em 0 rgba(255, 40, 90, 0.55), -0.04em 0 rgba(0, 205, 255, 0.55);
+      animation: gsl-jitter 1.8s steps(1, end) infinite;
+    }
+    @keyframes gsl-jitter {
+      0%, 87% { transform: none; }
+      90% { transform: translateX(-2px); }
+      94% { transform: translateX(3px); }
+      97% { transform: translateX(-1px); }
+      100% { transform: none; }
     }
 
     .cell {
-        width: 3rem;
-        height: 3rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
+      width: clamp(1.9rem, 8.5vw, 2.75rem);
+      aspect-ratio: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 0.5rem;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      background: #7f1d1d;
+      filter: brightness(var(--tint, 1));
+      transition: background 0.25s, transform 0.15s;
+      cursor: pointer;
+    }
+    /* Hover flourishes only where hover exists — touch gets no sticky states. */
+    @media (hover: hover) and (pointer: fine) {
+      .cell:hover { transform: scale(1.06); }
+    }
+    .cell:focus-visible { outline: 2px solid #34d399; outline-offset: 2px; }
+    .cell.on { background: #059669; box-shadow: 0 0 14px rgba(52, 211, 153, 0.35); }
+    /* Flash animates filter (cheap) instead of v2.0's animated box-shadow. */
+    .cell.flash { animation: cell-flash 0.25s ease-out; }
+    @keyframes cell-flash {
+      0% { filter: brightness(2.3); }
+      100% { filter: brightness(var(--tint, 1)); }
+    }
+    /* Char mode: the 64 cells spell out a decoded transmission. */
+    .cell.char {
+      background: #07100c;
+      border-color: rgba(52, 211, 153, 0.35);
+      box-shadow: none;
+      color: #d1fae5;
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: clamp(0.8rem, 3.2vw, 1.15rem);
+      font-weight: 600;
     }
 
-    .bg-red-700 {
-        background-color: red;
+    details.info summary { cursor: pointer; list-style: none; }
+    details.info summary::-webkit-details-marker { display: none; }
+    details.info[open] summary .chev { transform: rotate(90deg); }
+    .chev { display: inline-block; transition: transform 0.2s; }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+      }
     }
-
-    .bg-green-500 {
-        background-color: green;
-    }
-
-    #gameboard {
-        display: grid;
-        grid-template-columns: repeat(8, 1fr);
-        gap: 10px;
-        margin-bottom: 20px;
-        max-width: 80vw;
-    }
-
-    .matrix {
-        display: flex;
-        justify-content: center;
-        align-items: flex-start;
-        width: 100%;
-        height: 200px;
-        overflow: hidden;
-        white-space: nowrap;
-        position: relative;
-    }
-
-    .matrix-column {
-        position: absolute;
-        display: flex;
-        flex-direction: column;
-    }
-
-    .matrix-column span {
-        font-size: 20px;
-        animation: fall linear infinite;
-    }
-
-    @keyframes fall {
-        0% {
-            opacity: 0;
-            transform: translateY(-100%);
-        }
-
-        100% {
-            opacity: 1;
-            transform: translateY(100%);
-        }
-    }
-
-    .center-image {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-    }
-
-    .hidden {
-        display: none;
-    }
-
-    button {
-        cursor: pointer;
-    }
-
-    button:hover {
-        opacity: 1.0;
-    }
-
-    .gradient-text span {
-        display: inline-block;
-        transition: all 0.5s;
-    }
-
-    .hidden {
-        display: none;
-    }
-
-    .faded {
-        opacity: 0.2;
-        transition: opacity 0.5s;
-    }
-
-    .refresh-button {
-        position: absolute;
-        top: 20px;
-        right: 20px;
-        background: transparent;
-        border: none;
-        cursor: pointer;
-    }
-
-    .refresh-button img {
-        width: 30px;
-        height: 30px;
-    }
-
-    .matrix {
-        display: flex;
-        justify-content: center;
-        align-items: flex-start;
-        width: 100%;
-        height: 200px;
-        overflow: hidden;
-        white-space: nowrap;
-        position: relative;
-    }
-
-    .matrix-column {
-        position: absolute;
-        display: flex;
-        flex-direction: column;
-    }
-
-    .matrix-column span {
-        font-size: 20px;
-        animation: fall linear infinite;
-    }
-
-    @keyframes fall {
-        0% {
-            opacity: 0;
-            transform: translateY(-100%);
-        }
-
-        100% {
-            opacity: 1;
-            transform: translateY(100%);
-        }
-    }
-
-    .button-outline {
-        border: 2px solid white;
-        transition: background-color 0.3s, border-color 0.3s;
-    }
-
-    .button-outline:hover {
-        background-color: white;
-        color: black;
-    }
-</style>
-
-    
-    <link href="jQueryAssets/jquery.ui.core.min.css" rel="stylesheet" type="text/css">
-    <link href="jQueryAssets/jquery.ui.theme.min.css" rel="stylesheet" type="text/css">
-    <link href="jQueryAssets/jquery.ui.progressbar.min.css" rel="stylesheet" type="text/css">
+  </style>
 </head>
-<body>
-    <button class="refresh-button" id="button1">
-        <img src="https://www.drupal.org/files/styles/grid-4-2x/public/Reload_mark_bg_RGB_black_x8.png?&amp;" w="40" h="40" alt="Refresh">
+
+<body class="min-h-dvh bg-[#030303] font-sans text-neutral-300 antialiased selection:bg-emerald-500/30">
+  <div class="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_top,rgba(52,211,153,0.05),transparent_60%)]"></div>
+
+  <header class="relative z-10 mx-auto flex w-full max-w-3xl items-center justify-between px-4 pt-6">
+    <span class="font-mono text-xs tracking-[0.35em] text-emerald-400/90">GSL·ENCRYPTION</span>
+    <button id="refreshButton" type="button" title="Reset session" aria-label="Reset session"
+      class="rounded-lg border border-neutral-800 p-2.5 text-neutral-400 transition hover:border-neutral-600 hover:text-white">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/>
+      </svg>
     </button>
-<div class="flex flex-col items-center text-center">
+  </header>
 
-    <h2 class="text-4xl sm:text-5xl font-bold tracking-tight gradient-text" id="dynamic-header">
-            <span id="first-part" class="text-red-500">Choose and</span>
-            <span id="second-part">hear the color</span>
-        </h2>
-        <div id="typing-area" class="mt-8">
-            <textarea id="typingInput" class="w-80 h-24 bg-gray-800 text-white border-none p-2" placeholder="Type your message here..."></textarea>
+  <main class="relative z-10 mx-auto flex w-full max-w-3xl flex-col items-center gap-7 px-4 pb-16 pt-10">
+
+    <h1 id="dynamicHeader" class="min-h-14 w-full text-center font-display text-3xl font-bold tracking-tight sm:text-4xl"></h1>
+    <p id="statusLine" class="min-h-5 text-center font-mono text-xs text-neutral-500" role="status" aria-live="polite"></p>
+
+    <!-- input -->
+    <section class="w-full max-w-xl rounded-xl border border-neutral-800/80 bg-neutral-950/70 p-4">
+      <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div class="flex gap-1 rounded-lg border border-neutral-800 p-0.5 font-mono text-xs" role="tablist" aria-label="Input kind">
+          <button id="tabText" type="button" role="tab" aria-selected="true"
+            class="rounded-md px-3 py-2 text-emerald-300 transition aria-selected:bg-emerald-500/15">Message</button>
+          <button id="tabFile" type="button" role="tab" aria-selected="false"
+            class="rounded-md px-3 py-2 text-neutral-400 transition aria-selected:bg-emerald-500/15 aria-selected:text-emerald-300">File · Image · Code</button>
         </div>
-      <div id="wpmCounter" class="mt-2"></div>
-<div id="gameboard" class="grid grid-cols-8 gap-2 mt-4"></div>
-        <select id="songNumber" class="mt-4 p-4 bg-red-600 rounded">
-            <option value="">Select a song</option>
-            <option value="1">Tetris Theme</option>
-            <option value="2">Westworld Theme</option>
-            <option value="3">Interstellar Theme</option>
-            <option value="4">Happy Violence (short)</option>
-            <option value="5">Dancing Queen</option>
-            <option value="6">Good Riddance (Time of Your Life)</option>
-            <option value="7">Death Note - L's Theme</option>
-            <option value="8">Bohemian Rhapsody</option>
-            <option value="9">Only Time</option>
-            <option value="10">Holding Out for a Hero</option>
-            <option value="11">Hypnotize</option>
-        </select>
-        <button id="encryptButton" class="mt-4 p-4 bg-blue-600 rounded button-outline">Encrypt and Play MIDI</button>
-        <button id="downloadButton" class="mt-4 p-4 bg-green-600 rounded hidden button-outline">Download SVG</button>
-        <button id="decompileButton" class="mt-4 p-4 bg-yellow-600 rounded button-outline">Decompile .slayy</button>
-        <div id="Results" class="mt-4 hidden">
-            <textarea id="ResultsText" class="w-80 h-24 bg-gray-800 text-white border-none p-2" placeholder="Encrypted message..." disabled=""></textarea>
+        <span id="wpmCounter" class="font-mono text-xs text-neutral-500">WPM: —</span>
+      </div>
+
+      <!-- 16px font so iOS doesn't zoom on focus; autocorrect off — it's a cipher input. -->
+      <textarea id="typingInput" rows="3" placeholder="Type your message here…"
+        autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="done"
+        class="w-full resize-none rounded-lg border border-neutral-800 bg-neutral-900/80 p-3 font-mono text-base text-emerald-100 placeholder-neutral-600 focus:border-emerald-500/60 focus:outline-none disabled:opacity-50"></textarea>
+
+      <div id="fileZone" class="hidden">
+        <div id="fileDrop"
+          class="flex min-h-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-neutral-700 bg-neutral-900/50 p-4 text-center font-mono text-xs text-neutral-500 transition hover:border-emerald-500/50 hover:text-neutral-300">
+          <span>Drop any file here, or tap to browse</span>
+          <span class="text-[10px] text-neutral-600">bytes are bytes — image, code, whatever · 4 MB max</span>
         </div>
-        <div id="matrix" class="matrix mt-8"></div>
-    </div>
+        <div id="fileChip" class="mt-2 hidden items-center justify-between gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 font-mono text-xs text-emerald-200">
+          <span id="fileChipLabel" class="truncate"></span>
+          <button id="fileClear" type="button" class="shrink-0 p-1 text-neutral-400 hover:text-red-400" aria-label="Remove file">✕</button>
+        </div>
+        <input id="msgFileInput" type="file" class="hidden">
+      </div>
+    </section>
 
-    <script src="https://cdn.jsdelivr.net/npm/tone@latest/build/Tone.js"></script>
-    <!-- Explicit UMD build so `Midi` is a real global (the bare /npm/@tonejs/midi
-         entry is a module and left `new Midi(...)` undefined). -->
-    <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi@latest/build/Midi.js"></script>
-    <!-- Removed a second jQuery (3.6.0) that reloaded here and clobbered the
-         jQuery-UI progressbar plugin bound to 1.11.1 above — it was throwing
-         "$(...).progressbar is not a function" on init and taking the tool down. -->
-    <script>
-        const midiFiles = [
-            "https://irp.cdn-website.com/cee417da/audio/Tetris_-_A_Theme.mid",
-            "https://irp.cdn-website.com/cee417da/audio/Ramin_Djawadi_-_Westworld_Theme.mid",
-            "https://irp.cdn-website.com/cee417da/audio/CornChaseIntersteller.mid",
-            "https://irp.cdn-website.com/cee417da/audio/Dada_Life_-_Happy_Violence.mid",
-            "https://irp.cdn-website.com/cee417da/audio/DancingQueen_(1).mid",
-            "https://irp.cdn-website.com/cee417da/audio/GoodRiddance(TimeOfYourLife)(3).mid",
-            "https://irp.cdn-website.com/cee417da/audio/Death_Note_-_L-s_Theme.mid",
-            "https://irp.cdn-website.com/cee417da/audio/Bohemian-Rhapsody-1.mid",
-            "https://irp.cdn-website.com/cee417da/audio/OnlyTime.mid",
-            "https://irp.cdn-website.com/cee417da/audio/Holding-Out-For-A-Hero-1.mid",
-            "https://irp.cdn-website.com/cee417da/audio/Hypnotize_(2).mid",
-        ];
+    <!-- song + transport controls -->
+    <section class="flex w-full flex-wrap items-center justify-center gap-3">
+      <select id="songNumber" aria-label="Select a song"
+        class="rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2.5 font-mono text-sm text-neutral-200 focus:border-emerald-500/60 focus:outline-none disabled:opacity-50">
+        <option value="">Select a song — the key</option>
+        <option value="1">Tetris Theme</option>
+        <option value="2">Westworld Theme</option>
+        <option value="3">Interstellar Theme</option>
+        <option value="4">Happy Violence (short)</option>
+        <option value="5">Dancing Queen</option>
+        <option value="6">Good Riddance (Time of Your Life)</option>
+        <option value="7">Death Note — L's Theme</option>
+        <option value="8">Bohemian Rhapsody</option>
+        <option value="9">Only Time</option>
+        <option value="10">Holding Out for a Hero</option>
+        <option value="11">Hypnotize</option>
+      </select>
+      <button id="loadMidiButton" type="button"
+        class="rounded-lg border border-neutral-700 bg-neutral-900/60 px-4 py-2.5 font-mono text-sm text-neutral-300 transition hover:border-neutral-500 hover:text-white disabled:opacity-40">load your own .mid</button>
+      <input id="midiFileInput" type="file" accept=".mid,.midi,audio/midi,audio/mid" class="hidden">
+    </section>
 
-        const ROWS = 8;
-        const COLUMNS = 8;
-        let gameboard = Array(ROWS).fill().map(() => Array(COLUMNS).fill(false));
-        let typingStartTime, typingEndTime, wpm;
-        let firstPartTyped = false;
-        let currentMessage = '';
-        let wpmValue = 0;
+    <section class="flex w-full flex-wrap items-center justify-center gap-3">
+      <button id="encryptButton" type="button"
+        class="rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-5 py-2.5 font-mono text-sm text-emerald-300 transition hover:border-emerald-400 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40">Encrypt and Play MIDI</button>
+      <button id="pauseButton" type="button"
+        class="hidden rounded-lg border border-neutral-700 bg-neutral-900/60 px-4 py-2.5 font-mono text-sm text-neutral-300 transition hover:border-neutral-500 hover:text-white">Pause</button>
+      <button id="stopButton" type="button"
+        class="hidden rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2.5 font-mono text-sm text-red-300 transition hover:border-red-400 hover:bg-red-500/20">Stop</button>
+      <button id="downloadButton" type="button"
+        class="hidden rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-5 py-2.5 font-mono text-sm text-emerald-300 transition hover:border-emerald-400 hover:bg-emerald-500/20">Download .slayy</button>
+      <button id="decompileButton" type="button"
+        class="rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-2.5 font-mono text-sm text-amber-300/90 transition hover:border-amber-400 hover:bg-amber-500/15">Decompile .slayy</button>
+      <input id="slayyFileInput" type="file" accept=".slayy,text/plain" class="hidden">
+      <input id="crosscheckMidiInput" type="file" accept=".mid,.midi,audio/midi,audio/mid" class="hidden">
+    </section>
 
-        function calculateWPM() {
-            const typedText = document.getElementById("typingInput").value.trim().split(/\s+/).length;
-            const timeDiff = (typingEndTime - typingStartTime) / 60000;
-            wpmValue = (typedText / timeDiff).toFixed(2);
-            document.getElementById("wpmCounter").innerText = `WPM: ${wpmValue}`;
-        }
+    <!-- progress: tall hit area for fingers, thin track for the eye -->
+    <section id="transportPanel" class="hidden w-full max-w-xl">
+      <div class="mb-1 flex justify-between font-mono text-[11px] text-neutral-500">
+        <span id="nowPlaying"></span>
+        <span id="timeLabel">0:00 / 0:00</span>
+      </div>
+      <div id="progressBar" class="flex h-8 w-full cursor-pointer items-center" title="Drag to seek">
+        <div class="h-2 w-full overflow-hidden rounded-full bg-neutral-800">
+          <div id="progressFill" class="h-full w-full origin-left rounded-full bg-emerald-500/80" style="transform:scaleX(0)"></div>
+        </div>
+      </div>
+      <div class="h-0.5 w-full overflow-hidden rounded bg-neutral-900">
+        <div id="levelMeter" class="h-full w-full origin-left bg-emerald-400/70" style="transform:scaleX(0)"></div>
+      </div>
+    </section>
 
-        document.getElementById("typingInput").addEventListener("input", function() {
-            if (!typingStartTime) typingStartTime = new Date().getTime();
-            typingEndTime = new Date().getTime();
-            const typedText = document.getElementById("typingInput").value;
-            currentMessage = typedText;
-            updateHeader(currentMessage);
-            if (!firstPartTyped) {
-                firstPartTyped = true;
-            }
-        });
+    <!-- the 64 gates -->
+    <section id="gameboard" aria-label="64-cell XOR gate grid" class="grid grid-cols-8 gap-1.5 sm:gap-2"></section>
+    <p class="-mt-4 select-none font-mono text-[10px] text-neutral-600">tap flip · drag paint · hold clear</p>
 
-        function updateHeader(message) {
-            const header = document.getElementById("dynamic-header");
-            header.innerHTML = ""; // Clear previous content
-            for (let i = 0; i < message.length; i++) {
-                const span = document.createElement("span");
-                span.textContent = message[i];
-                span.style.color = i % 2 === 0 ? "red" : "white"; // Alternate colors
-                header.appendChild(span);
-            }
-        }
+    <!-- the binary, vertically under the grid -->
+    <canvas id="rainCanvas" class="h-56 w-full max-w-2xl rounded-xl border border-neutral-900 bg-black" aria-label="Binary keystream visualization" role="img"></canvas>
 
-        function initializeGameboard() {
-            const gameboardElement = document.getElementById("gameboard");
-            gameboardElement.innerHTML = "";
-            for (let i = 0; i < ROWS; i++) {
-                for (let j = 0; j < COLUMNS; j++) {
-                    const cell = document.createElement("div");
-                    cell.classList.add("cell", "w-12", "h-12", "bg-red-700", "flex", "items-center", "justify-center", "text-lg", "font-bold", "cursor-pointer");
-                    cell.dataset.row = i;
-                    cell.dataset.col = j;
-                    cell.addEventListener('click', () => handleCellClick(i, j));
-                    gameboardElement.appendChild(cell);
-                }
-            }
-        }
+    <!-- syzygy QR -->
+    <section id="qrSection" class="hidden w-full max-w-xl">
+      <div class="mb-1 flex items-center justify-between">
+        <span class="font-mono text-[11px] uppercase tracking-widest text-neutral-500">Syzygy QR — <span id="qrModeLabel">art mode</span></span>
+        <span class="font-mono text-[11px] text-neutral-600">EC M · Reed–Solomon</span>
+      </div>
+      <div class="flex flex-col items-center gap-2">
+        <canvas id="qrCanvas" class="cursor-pointer rounded-xl border border-neutral-900 bg-black" role="img" aria-label="Shareable QR code" title="Tap: art ↔ scannable · hold: save PNG"></canvas>
+        <p class="select-none font-mono text-[10px] text-neutral-600">tap: art ↔ scannable · hold: save png · scan to decode anywhere</p>
+        <div class="flex gap-3">
+          <button id="copyLinkButton" type="button"
+            class="rounded-lg border border-neutral-700 bg-neutral-900/60 px-3 py-2 font-mono text-xs text-neutral-300 transition hover:border-neutral-500 hover:text-white">copy share link</button>
+          <button id="saveQrButton" type="button"
+            class="rounded-lg border border-neutral-700 bg-neutral-900/60 px-3 py-2 font-mono text-xs text-neutral-300 transition hover:border-neutral-500 hover:text-white">save png</button>
+        </div>
+      </div>
+    </section>
 
-        function handleCellClick(row, col) {
-            toggleCell(row, col);
-            updateGameboard();
-            const alteredMessage = applyGridStateToMessage(currentMessage);
-            updateHeader(alteredMessage);
-            const binaryMessage = alteredMessage.split('').map(char => char.charCodeAt(0).toString(2).padStart(8, '0')).join('');
-            updateMatrix(binaryMessage, false);
-        }
+    <!-- results -->
+    <section id="results" class="hidden w-full max-w-xl">
+      <div class="mb-1 flex items-center justify-between">
+        <span class="font-mono text-[11px] uppercase tracking-widest text-neutral-500">Encoded payload (base64)</span>
+        <button id="copyResults" type="button" class="p-1 font-mono text-[11px] text-emerald-400 hover:text-emerald-300">copy</button>
+      </div>
+      <textarea id="resultsText" rows="3" readonly
+        class="w-full resize-none rounded-lg border border-neutral-800 bg-neutral-900/80 p-3 font-mono text-xs text-neutral-300 focus:outline-none"></textarea>
+    </section>
 
-        function toggleCell(row, col) {
-            gameboard[row][col] = !gameboard[row][col];
-        }
+    <!-- decompile output -->
+    <section id="decompilePanel" class="hidden w-full max-w-xl rounded-xl border border-neutral-800 bg-neutral-950/70 p-4">
+      <h2 class="mb-3 font-mono text-xs uppercase tracking-widest text-neutral-400">Decompiled .slayy</h2>
+      <div id="svgContainer" class="mb-3 overflow-hidden rounded-lg border border-neutral-900 empty:hidden [&_svg]:h-auto [&_svg]:w-full"></div>
+      <p id="verifyLine" class="mb-2 font-mono text-[11px] leading-relaxed text-neutral-500"></p>
+      <div id="decodedOut" class="font-mono text-sm"></div>
+      <button id="provideMidiButton" type="button"
+        class="mt-3 hidden rounded-lg border border-neutral-700 bg-neutral-900/60 px-4 py-2.5 font-mono text-xs text-neutral-300 transition hover:border-neutral-500 hover:text-white">Provide the original .mid to cross-check</button>
+    </section>
 
-        function updateGameboard() {
-            const cells = document.querySelectorAll(".cell");
-            cells.forEach(cell => {
-                const row = parseInt(cell.dataset.row);
-                const col = parseInt(cell.dataset.col);
-                const color = gameboard[row][col] ? getGreenVariation(row, col) : getRedVariation(row, col);
-                cell.style.backgroundColor = color;
-            });
-        }
+    <!-- information -->
+    <details id="moreInfo" class="info w-full max-w-xl rounded-xl border border-neutral-800/80 bg-neutral-950/50">
+      <summary class="flex items-center gap-2 px-4 py-3 font-mono text-xs uppercase tracking-widest text-neutral-400 hover:text-neutral-200">
+        <span class="chev">›</span> Information
+      </summary>
+      <div class="space-y-4 border-t border-neutral-800/80 px-4 py-4 text-sm leading-relaxed text-neutral-400">
+        <p>
+          <strong class="text-neutral-200">How v2 works.</strong> The chosen MIDI file is a constant, so its parsed
+          note sequence is a constant too. Each note contributes three bytes — midi number, velocity, ticks — forming a
+          deterministic keystream. Your input (a typed message, or any file's raw bytes) is XORed against that keystream,
+          cycling circularly when the lengths differ, which they always do. XOR twice with the same song and you get the
+          original back, bit for bit: a lossless chop. Two things reconstruct the message — the <code class="rounded bg-neutral-900 px-1 py-0.5 text-emerald-300">.slayy</code>
+          file and the song. An AES-256-GCM seal (Web Crypto, PBKDF2) wraps the payload for one-click decompiling with
+          integrity, and the decompiler re-derives the keystream from the song to prove the bits check out. A finished
+          dump can also collapse into a <strong class="text-neutral-200">syzygy QR</strong> — tap it for the scannable
+          form (QR's own Reed–Solomon error correction carries the payload) and whoever scans it watches the code break
+          down through the binary rain until the 64 cells spell the message out. The passphrase lives in this page's
+          source: this is art, not security.
+        </p>
+        <p>
+          This project is an extension of the concept from
+          <a class="text-emerald-500/90 underline underline-offset-2 hover:text-emerald-400" href="https://slayy1.vercel.app">Slayybit Image Embed</a>,
+          which explores lazy (look for .slayy at the end of a string) ways of embedding messages within images using
+          MIDI files. The message is dynamically altered by the MIDI file being played, using the XOR operation for
+          real-time binary transformation.
+        </p>
+        <p>
+          The core idea uses a MIDI synth to alter the message as the song plays, inspired by the
+          <a class="text-emerald-500/90 underline underline-offset-2 hover:text-emerald-400" href="/home.html">MIDI Synth</a>
+          design and built on the
+          <a class="text-emerald-500/90 underline underline-offset-2 hover:text-emerald-400" href="https://github.com/Tonejs/Midi">Tone.js MIDI library</a>.
+          As the song plays, the text is XORed with the notes in real time, creating a unique binary representation that
+          is visualized and embedded within an SVG image — saved together as a .slayy file encapsulating both visual and
+          encrypted data.
+        </p>
+        <p>
+          The term "Slayy" phonetically represents 'Ghidra's Sleigh', openly available on the NSA's GitHub, which uses
+          various techniques to recover lost binary data — embedding and transforming data through encryption and
+          visualization. This project is a nod to the importance of secure and hidden data transmission.
+        </p>
+        <p>
+          <a class="text-emerald-500/90 underline underline-offset-2 hover:text-emerald-400" href="https://github.com/musha1140/APP2" target="_blank" rel="noopener">Full source code variants</a>
+          ·
+          <a class="text-emerald-500/90 underline underline-offset-2 hover:text-emerald-400" href="https://github.com/musha1140/GS" target="_blank" rel="noopener">GitHub source</a>
+          ·
+          <a class="text-emerald-500/90 underline underline-offset-2 hover:text-emerald-400" href="https://keyjson.replit.app/mp3.html" target="_blank" rel="noopener">MP3 Synth</a>
+          — a related project demonstrating similar concepts with MP3 files.
+        </p>
+      </div>
+    </details>
 
-        function getRedVariation(row, col) {
-            const baseRed = 255;
-            const redVariation = Math.floor(Math.random() * 1);
-            return `rgb(${baseRed}, ${redVariation}, ${redVariation})`;
-        }
+    <footer class="mt-2 font-mono text-[11px] text-neutral-600">
+      © 2024–2026 Gas-Lighting ·
+      <a class="text-emerald-500/70 hover:text-emerald-400" href="https://github.com/musha1140/GS">source</a>
+    </footer>
+  </main>
 
-        function getGreenVariation(row, col) {
-            const baseGreen = 255;
-            const greenVariation = Math.floor(Math.random() * 1);
-            return `rgb(${greenVariation}, ${baseGreen}, ${greenVariation})`;
-        }
+  <script type="module">
+    /* ================================ utils ================================ */
+    const $ = (id) => document.getElementById(id);
+    const ENC = new TextEncoder();
+    const DEC = new TextDecoder();
+    const clamp01 = (x) => Math.min(1, Math.max(0, x));
+    const fmtTime = (s) => { s = Math.max(0, Math.floor(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+    const buzz = (ms) => { if (navigator.vibrate) navigator.vibrate(ms); };
+    const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-        function applyGridStateToMessage(message) {
-            let result = '';
-            for (let i = 0; i < message.length; i++) {
-                const charCode = message.charCodeAt(i);
-                const row = i % ROWS;
-                const col = (i / ROWS) % COLUMNS;
-                const gridState = gameboard[row][col] ? 1 : 0;
-                result += String.fromCharCode(charCode ^ gridState);
-            }
-            return result;
-        }
-
-        async function playMIDI(songNumber) {
-            // Unlock the AudioContext — the encrypt click is the required user
-            // gesture. Without this, Tone.Transport.start() produced no sound.
-            await Tone.start();
-            const midiFile = midiFiles[songNumber - 1];
-            document.getElementById("typingInput").disabled = true;
-            // Fade out elements not needed during playback
-            document.getElementById("typing-area").classList.add("hidden");
-            document.getElementById("songNumber").classList.add("faded");
-            document.getElementById("encryptButton").classList.add("faded");
-            fetch(midiFile)
-                .then(response => response.arrayBuffer())
-                .then(data => {
-                    const midi = new Midi(data);
-                    const synth = new Tone.PolySynth(Tone.Synth, {
-                        envelope: {
-                            attack: 0.03,
-                            decay: 0.1,
-                            sustain: 0.5,
-                            release: 1,
-                            oscillator: {
-                                type: "sine",
-                            },
-                        },
-                    }).toDestination();
-                    midi.tracks.forEach(track => {
-                        track.notes.forEach(note => {
-                            const midiNumber = note.midi % 64;
-                            const row = Math.floor(midiNumber / 8);
-                            const col = midiNumber % 8;
-                            Tone.Transport.schedule(time => {
-                                synth.triggerAttackRelease(note.name, note.duration, time);
-                                handleCellClick(row, col);
-                                const progress = (Tone.Transport.seconds / midi.duration) * 100;
-                                const xorResult = applyXOR(currentMessage, note.name);
-                                updateHeader(xorResult);
-                                const binaryMessage = xorResult.split('').map(char => char.charCodeAt(0).toString(2).padStart(8, '0')).join('');
-                                updateMatrix(binaryMessage, false);
-                            }, note.time);
-                        });
-                    });
-                    Tone.Transport.start();
-                    Tone.Transport.scheduleOnce(() => {
-                        document.getElementById("typingInput").disabled = false;
-                        document.getElementById("Results").classList.remove("hidden");
-                        document.getElementById("ResultsText").value = base64Encode(document.getElementById("typingInput").value);
-                        document.getElementById("downloadButton").classList.remove("hidden"); // Show the download button
-                        prepareSVGForDownload();
-                        const binaryMessage = applyXORToBinary(currentMessage, "");
-                        updateMatrix(binaryMessage, true);
-                        // Revert fading after song finishes
-                        document.getElementById("typing-area").classList.remove("hidden");
-                        document.getElementById("songNumber").classList.remove("faded");
-                        document.getElementById("encryptButton").classList.remove("faded");
-                    }, midi.duration);
-                });
-        }
-
-        function applyXOR(message, midiNote) {
-            let xorResult = "";
-            for (let i = 0; i < message.length; i++) {
-                xorResult += String.fromCharCode(message.charCodeAt(i) ^ midiNote.charCodeAt(i % midiNote.length));
-            }
-            return xorResult;
-        }
-
-        function applyXORToBinary(message, midiNote) {
-            let xorResult = applyXOR(message, midiNote);
-            return xorResult.split('').map(char => char.charCodeAt(0).toString(2).padStart(8, '0')).join('');
-        }
-
-        document.getElementById("encryptButton").addEventListener("click", function() {
-            const message = document.getElementById("typingInput").value;
-            if (!message) {
-                alert("Please type a message.");
-                return;
-            }
-            const songNumber = parseInt(document.getElementById("songNumber").value);
-            if (!songNumber || songNumber < 1 || songNumber > midiFiles.length) {
-                alert("Please choose a valid song number.");
-                return;
-            }
-            calculateWPM();
-            currentMessage = message;
-            playMIDI(songNumber);
-            const binaryMessage = message.split('').map(char => char.charCodeAt(0).toString(2).padStart(8, '0')).join('');
-            updateMatrix(binaryMessage, false);
-        });
-
-        function base64Encode(str) {
-            const utf8Array = new TextEncoder().encode(str);
-            let base64String = "";
-            const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-            for (let i = 0; i < utf8Array.length; i += 3) {
-                const byte1 = utf8Array[i];
-                const byte2 = i + 1 < utf8Array.length ? utf8Array[i + 1] : 0;
-                const byte3 = i + 2 < utf8Array.length ? utf8Array[i + 2] : 0;
-                const base64Char1 = characters.charAt(byte1 >> 2);
-                const base64Char2 = characters.charAt(((byte1 & 0x03) << 4) | (byte2 >> 4));
-                const base64Char3 = i + 1 < utf8Array.length ? characters.charAt(((byte2 & 0x0f) << 2) | (byte3 >> 6)) : "=";
-                const base64Char4 = i + 2 < utf8Array.length ? characters.charAt(byte3 & 0x3f) : "=";
-                base64String += base64Char1 + base64Char2 + base64Char3 + base64Char4;
-            }
-            return base64String;
-        }
-
-        function encryptMessage(message) {
-            const key = CryptoJS.enc.Utf8.parse('your-encryption-key');
-            const iv = CryptoJS.enc.Utf8.parse('your-iv');
-            const encrypted = CryptoJS.AES.encrypt(message + wpmValue, key, {
-                iv: iv
-            }); // added the WPM to the message before encryption
-            return encrypted.toString();
-        }
-
-        document.getElementById("downloadButton").addEventListener("click", function () {
-    // Encrypt message and convert it to binary for SVG display
-    const binaryMessage = applyXORToBinary(currentMessage, ""); // Use your XOR function to get binary output
-    const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600">
-        <text x="10" y="40" font-size="24" fill="red">${binaryMessage}</text>
-    </svg>`;
-
-    // Encrypt the content from the ResultsText textarea
-    const encryptedMessage = encryptMessage(document.getElementById("ResultsText").value);
-
-   // Combine SVG with encrypted message in a custom `.slayy` format
-const slayyFileContent = `${svgContent}\n<!--${encryptedMessage}-->`;
-const blob = new Blob([slayyFileContent], { type: 'text/plain;charset=utf-8' });
-
-// Save file as `.slayy` — name after the first word of the message.
-const fileName = (currentMessage.trim().split(/\s+/)[0] || "gaslighting").replace(/[^a-z0-9]/gi, "_");
-        saveAs(blob, `${fileName}.slayy`);
-});
-
-document.getElementById("decompileButton").addEventListener("click", function () {
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = '.slayy';
-    fileInput.onchange = function (event) {
-        const file = event.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function (e) {
-                const content = e.target.result;
-
-                // Extract SVG content and encrypted message
-                const svgEndIndex = content.indexOf('<!--');
-                const svgContent = content.substring(0, svgEndIndex);
-                const encryptedMessage = content.substring(svgEndIndex + 4, content.indexOf('-->', svgEndIndex));
-
-                // Decrypt the message and display it
-                const decryptedMessage = decryptMessage(encryptedMessage);
-                document.getElementById('svgContainer').innerHTML = svgContent;
-                document.getElementById('ResultsText').value = decryptedMessage;
-                document.getElementById('Results').classList.remove("hidden");
-            };
-            reader.readAsText(file);
-        }
+    const toB64 = (u8) => {
+      let s = "";
+      for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+      return btoa(s);
     };
-    fileInput.click();
-});
+    const fromB64 = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    // URL-safe flavor for the QR share links (fragment- and scanner-friendly).
+    const toB64url = (u8) => toB64(u8).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+    const fromB64url = (s) => fromB64(s.replaceAll("-", "+").replaceAll("_", "/") + "=".repeat((4 - (s.length % 4)) % 4));
+    const sha256Hex = async (bytes) => {
+      const d = await crypto.subtle.digest("SHA-256", bytes);
+      return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+    };
+    const escXml = (s = "") => s.replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c]));
+    const toBits = (u8, capBytes = 8192) => {
+      const n = Math.min(u8.length, capBytes);
+      let s = "";
+      for (let i = 0; i < n; i++) s += u8[i].toString(2).padStart(8, "0");
+      return s || "0";
+    };
 
-// AES encryption for the message
-function encryptMessage(message) {
-    const key = CryptoJS.enc.Utf8.parse('your-encryption-key'); // Set a secure encryption key
-    const iv = CryptoJS.enc.Utf8.parse('your-iv'); // Set an initialization vector (IV)
-    const encrypted = CryptoJS.AES.encrypt(message, key, { iv: iv });
-    return encrypted.toString();
-}
+    // Seeded 2D Perlin-style gradient noise (~[0,1]) — drives the syzygy
+    // shimmer, the QR breakdown, and the grid spell-out order.
+    const perlin = (() => {
+      const p = new Uint8Array(512);
+      const perm = [...Array(256).keys()];
+      let seed = 1140;
+      const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+      for (let i = 255; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [perm[i], perm[j]] = [perm[j], perm[i]]; }
+      for (let i = 0; i < 512; i++) p[i] = perm[i & 255];
+      const fade = (t) => t * t * t * (t * (t * 6 - 15) + 10);
+      const lerp = (a, b, t) => a + t * (b - a);
+      const grad = (h, x, y) => ((h & 1) ? -x : x) + ((h & 2) ? -y : y);
+      return (x, y) => {
+        const X = Math.floor(x) & 255, Y = Math.floor(y) & 255;
+        x -= Math.floor(x); y -= Math.floor(y);
+        const u = fade(x), v = fade(y);
+        const n = lerp(
+          lerp(grad(p[p[X] + Y], x, y), grad(p[p[X + 1] + Y], x - 1, y), u),
+          lerp(grad(p[p[X] + Y + 1], x, y - 1), grad(p[p[X + 1] + Y + 1], x - 1, y - 1), u),
+          v
+        );
+        return clamp01(n * 0.7 + 0.5);
+      };
+    })();
 
-// AES decryption for the message
-function decryptMessage(encryptedMessage) {
-    const key = CryptoJS.enc.Utf8.parse('your-encryption-key'); // Match the encryption key
-    const iv = CryptoJS.enc.Utf8.parse('your-iv'); // Match the IV used in encryption
-    const decrypted = CryptoJS.AES.decrypt(encryptedMessage, key, { iv: iv });
-    return decrypted.toString(CryptoJS.enc.Utf8);
-}
+    // The UMD build has historically exposed the class both ways.
+    const MidiCtor = window.Midi && window.Midi.Midi ? window.Midi.Midi : window.Midi;
 
-// XOR encryption to binary
-function applyXORToBinary(message, key) {
-    let xorResult = "";
-    for (let i = 0; i < message.length; i++) {
-        xorResult += String.fromCharCode(message.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+    /* ============================ cipher core ============================= */
+    // Layer 1: the featured mechanism. A constant .mid parses to a constant
+    // note list, and each note yields 3 integer bytes straight from the file.
+    // The keystream cycles circularly over input of any length, so the song-vs-
+    // message length mismatch is resolved by modular arithmetic and the XOR
+    // stays a lossless, self-inverse chop.
+    function deriveKeystream(midi) {
+      const notes = [];
+      midi.tracks.forEach((t) => t.notes.forEach((n) => notes.push(n)));
+      notes.sort((a, b) => a.ticks - b.ticks || a.midi - b.midi);
+      if (!notes.length) return new Uint8Array([0]);
+      const ks = new Uint8Array(notes.length * 3);
+      notes.forEach((n, i) => {
+        ks[i * 3] = n.midi & 0xff;
+        ks[i * 3 + 1] = Math.round(n.velocity * 127) & 0xff;
+        ks[i * 3 + 2] = (n.ticks ^ (n.ticks >>> 8)) & 0xff;
+      });
+      return ks;
     }
-    return xorResult
-        .split('')
-        .map(char => char.charCodeAt(0).toString(2).padStart(8, '0'))
-        .join(' ');
-}
-        function updateMatrix(binaryMessage, makeStatic) {
-            const matrix = document.getElementById('matrix');
-            matrix.innerHTML = '';
-            const columns = Math.floor(matrix.offsetWidth / 20);
-            const rows = Math.floor(matrix.offsetHeight / 20);
-            let binaryIndex = 0;
-            for (let i = 0; i < columns; i++) {
-                const column = document.createElement('div');
-                column.className = 'matrix-column';
-                column.style.left = `${i * 20}px`;
-                for (let j = 0; j < rows; j++) {
-                    const span = document.createElement('span');
-                    span.textContent = binaryMessage[binaryIndex % binaryMessage.length];
-                    span.style.color = binaryMessage[binaryIndex % binaryMessage.length] === '0' ? 'red' : 'green';
-                    if (!makeStatic) {
-                        span.style.animationDelay = `${Math.random() * 1}s`;
-                    } else {
-                        span.style.animation = 'none';
-                    }
-                    column.appendChild(span);
-                    binaryIndex++;
-                }
-                matrix.appendChild(column);
-            }
-        }
+    const xorBytes = (data, ks) => data.map((b, i) => b ^ ks[i % ks.length]);
 
-        function toggleVisibility() {
-            const moreInfo = document.getElementById("moreInfo");
-            if (moreInfo.style.display === "none" || moreInfo.style.display === "") {
-                moreInfo.style.display = "block";
-            } else {
-                moreInfo.style.display = "none";
-            }
-        }
+    // Layer 2: AES-256-GCM seal for one-click decompiling with integrity.
+    // The passphrase is in plain sight — decorative crypto, honestly labeled.
+    const PASSPHRASE = "ghidra's sleigh :: gsl v2 (art, not security)";
+    const PBKDF2_ITER = 100000;
+    async function deriveAesKey(salt) {
+      const base = await crypto.subtle.importKey("raw", ENC.encode(PASSPHRASE), "PBKDF2", false, ["deriveKey"]);
+      return crypto.subtle.deriveKey(
+        { name: "PBKDF2", salt, iterations: PBKDF2_ITER, hash: "SHA-256" },
+        base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]
+      );
+    }
+    async function seal(obj) {
+      const salt = crypto.getRandomValues(new Uint8Array(16));
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const key = await deriveAesKey(salt);
+      const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, ENC.encode(JSON.stringify(obj)));
+      return { salt: toB64(salt), iv: toB64(iv), ct: toB64(new Uint8Array(ct)) };
+    }
+    async function openSeal(meta) {
+      const key = await deriveAesKey(fromB64(meta.salt));
+      const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: fromB64(meta.iv) }, key, fromB64(meta.ct));
+      return JSON.parse(DEC.decode(new Uint8Array(plain)));
+    }
 
-        initializeGameboard();
-        updateGameboard();
-    </script>
-    <center>
-        <button id="button2">INFORMATION</button>
-        <div id="moreInfo" class="hidden">
-            <p>
-                This project is an extension of the concept from
-                <a href="https://slayy1.vercel.app">Slayybit Image Embed</a>
-                , which explores lazy (look for .slayy at the end of a string) ways of embedding messages within images using MIDI files. The project dynamically alters the message based on the MIDI file being played and utilizes the XOR operation for real-time binary transformation. The final output is saved as a .slayy file, which encapsulates both visual and encrypted data.
-            </p>
-            <p>
-                The core idea here involves using a MIDI Synth to dynamically alter the message based on the MIDI file being played. This was inspired by the
-                <a href="/home.html">MIDI Synth</a>
-                design, utilizing the
-                <a href="https://github.com/Tonejs/Midi">Tone.js MIDI library</a>
-                for creating and manipulating MIDI files.
-            </p>
-            <p>
-                In this project, as the song plays, the text is XORed with the MIDI notes in real-time, creating a unique binary representation. This binary data is then visualized and embedded within an SVG image. The final image, combined with the encrypted message, is saved as a .slayy file, a format designed to encapsulate both visual and encrypted data.
-            </p>
-            <p>
-                The term "Slayy" phonetically represents the process 'Ghidra's Sleigh', openly available to use on the NSA's GitHub, which uses various techniques to utilize binary lost data, embedding and transforming data through encryption and visualization techniques. This project is a nod to the importance of secure and hidden data transmission.
-            </p>
-            <p>
-                 <a href="https://github.com/musha1140/APP2" target="_blank" class="mt-4 text-blue-500">
-                    Full Source code varients 
-                <a href="https://github.com/musha1140/GS" target="_blank" class="mt-4 text-blue-500">
-                    GitHub source
-                </a>
-                code.
-            </p>
-            <p>
-                <a href="https://keyjson.replit.app/mp3.html" target="_blank" class="mt-4 text-blue-500">
-                    Mp3 Synth
-                </a>
-                is another related project that demonstrates similar concepts with MP3 files.
-            </p>
-        </div>
-    </center>
-<script type="text/javascript">
-$(function() {
-	$( "#Progressbar1" ).progressbar(); 
-});
-    </script>
+    /* ================================ songs =============================== */
+    const SONGS = [
+      { id: 1, title: "Tetris Theme", url: "https://irp.cdn-website.com/cee417da/audio/Tetris_-_A_Theme.mid" },
+      { id: 2, title: "Westworld Theme", url: "https://irp.cdn-website.com/cee417da/audio/Ramin_Djawadi_-_Westworld_Theme.mid" },
+      { id: 3, title: "Interstellar Theme", url: "https://irp.cdn-website.com/cee417da/audio/CornChaseIntersteller.mid" },
+      { id: 4, title: "Happy Violence (short)", url: "https://irp.cdn-website.com/cee417da/audio/Dada_Life_-_Happy_Violence.mid" },
+      { id: 5, title: "Dancing Queen", url: "https://irp.cdn-website.com/cee417da/audio/DancingQueen_(1).mid" },
+      { id: 6, title: "Good Riddance (Time of Your Life)", url: "https://irp.cdn-website.com/cee417da/audio/GoodRiddance(TimeOfYourLife)(3).mid" },
+      { id: 7, title: "Death Note — L's Theme", url: "https://irp.cdn-website.com/cee417da/audio/Death_Note_-_L-s_Theme.mid" },
+      { id: 8, title: "Bohemian Rhapsody", url: "https://irp.cdn-website.com/cee417da/audio/Bohemian-Rhapsody-1.mid" },
+      { id: 9, title: "Only Time", url: "https://irp.cdn-website.com/cee417da/audio/OnlyTime.mid" },
+      { id: 10, title: "Holding Out for a Hero", url: "https://irp.cdn-website.com/cee417da/audio/Holding-Out-For-A-Hero-1.mid" },
+      { id: 11, title: "Hypnotize", url: "https://irp.cdn-website.com/cee417da/audio/Hypnotize_(2).mid" },
+    ];
+    const songCache = new Map();
+    async function songFromBytes(bytes, id, title) {
+      const midi = new MidiCtor(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+      return { id, title, midi, bytes, sha256: await sha256Hex(bytes), keystream: deriveKeystream(midi) };
+    }
+    async function loadBuiltinSong(id) {
+      id = Number(id);
+      if (songCache.has(id)) return songCache.get(id);
+      const s = SONGS.find((x) => x.id === id);
+      if (!s) throw new Error(`unknown song ${id}`);
+      const res = await fetch(s.url);
+      if (!res.ok) throw new Error(`song fetch failed (${res.status})`);
+      const song = await songFromBytes(new Uint8Array(await res.arrayBuffer()), s.id, s.title);
+      songCache.set(id, song);
+      return song;
+    }
+
+    /* ================================ state =============================== */
+    const state = {
+      kind: "text",
+      text: "",
+      file: null,          // { bytes, name, mime }
+      customSong: null,
+      grid: new Uint8Array(64),
+      song: null,
+      session: null,
+      result: null,        // { input, song, bits }
+      typing: { start: 0, last: 0, wpm: 0 },
+    };
+    const DEFAULT_LABEL = "Choose and hear the color";
+
+    function currentInput() {
+      if (state.kind === "file" && state.file) {
+        return { bytes: state.file.bytes, label: `${state.file.name} · ${state.file.bytes.length}B`, kind: "file", name: state.file.name, mime: state.file.mime };
+      }
+      return { bytes: ENC.encode(state.text), label: state.text, kind: "text" };
+    }
+
+    /* =============================== header =============================== */
+    const headerEl = $("dynamicHeader");
+    let headerSpans = [];
+    const printable = (c) => { const code = c.codePointAt(0); return code < 32 || (code >= 127 && code < 160) ? "·" : c; };
+    function renderHeader(str) {
+      const chars = [...str.slice(0, 96)];
+      if (str.length > 96) chars.push("…");
+      if (chars.length !== headerSpans.length) {
+        headerEl.textContent = "";
+        headerSpans = chars.map((_, i) => {
+          const s = document.createElement("span");
+          s.className = i % 2 === 0 ? "hdr-a" : "hdr-b";
+          headerEl.appendChild(s);
+          return s;
+        });
+      }
+      chars.forEach((c, i) => {
+        const t = printable(c);
+        if (headerSpans[i].textContent !== t) headerSpans[i].textContent = t;
+      });
+    }
+
+    // Display-layer transforms (theater, same spirit as v1 — the real cipher
+    // is the keystream XOR above). Grid mapping fixes v1's float index, which
+    // silently read `undefined` and no-opped the whole effect.
+    function gridXorString(str) {
+      let out = "";
+      for (let i = 0; i < str.length; i++) {
+        const gate = state.grid[(i % 8) * 8 + (Math.floor(i / 8) % 8)];
+        out += String.fromCharCode(str.charCodeAt(i) ^ gate);
+      }
+      return out;
+    }
+    function applyGridBytes(bytes) {
+      const out = new Uint8Array(bytes.length);
+      for (let i = 0; i < bytes.length; i++) out[i] = bytes[i] ^ state.grid[(i % 8) * 8 + (Math.floor(i / 8) % 8)];
+      return out;
+    }
+    function noteXorString(str, noteName) {
+      let out = "";
+      for (let i = 0; i < str.length; i++) out += String.fromCharCode(str.charCodeAt(i) ^ noteName.charCodeAt(i % noteName.length));
+      return out;
+    }
+
+    /* ================================ status ============================== */
+    function setStatus(msg, kind = "info") {
+      const el = $("statusLine");
+      el.textContent = msg;
+      el.className = `min-h-5 text-center font-mono text-xs ${kind === "err" ? "text-red-400" : kind === "ok" ? "text-emerald-400" : "text-neutral-500"}`;
+    }
+
+    /* ================================ grid ================================ */
+    // Pointer-first: tap flips, drag paints the tapped value across cells,
+    // holding still for ~½s wipes the board. Keyboard activation stays via
+    // click events with detail === 0.
+    const cells = [];
+    let charMode = false;
+    function buildGrid() {
+      const board = $("gameboard");
+      for (let i = 0; i < 64; i++) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "cell";
+        b.setAttribute("aria-pressed", "false");
+        b.setAttribute("aria-label", `XOR gate ${i}`);
+        b.style.setProperty("--tint", (0.9 + Math.random() * 0.2).toFixed(3));
+        b.addEventListener("click", (e) => {
+          if (e.detail !== 0) return; // pointer path handles real taps
+          if (charMode) clearCharMode();
+          setCell(i, !state.grid[i]);
+          updateIdleDisplay();
+        });
+        board.appendChild(b);
+        cells.push(b);
+      }
+    }
+    function setCell(i, on) {
+      state.grid[i] = on ? 1 : 0;
+      cells[i].classList.toggle("on", !!on);
+      cells[i].setAttribute("aria-pressed", String(!!on));
+    }
+    function flashCell(i) {
+      const c = cells[i];
+      c.classList.remove("flash");
+      void c.offsetWidth;
+      c.classList.add("flash");
+    }
+    function clearBoard() {
+      for (let i = 0; i < 64; i++) setCell(i, 0);
+      updateIdleDisplay();
+    }
+    function clearCharMode() {
+      if (!charMode) return;
+      charMode = false;
+      cells.forEach((c, i) => {
+        c.classList.remove("char");
+        c.textContent = "";
+        setCell(i, state.grid[i]);
+      });
+    }
+
+    let idleUpdateQueued = false;
+    function scheduleIdleUpdate() {
+      if (idleUpdateQueued) return;
+      idleUpdateQueued = true;
+      requestAnimationFrame(() => { idleUpdateQueued = false; updateIdleDisplay(); });
+    }
+
+    {
+      const board = $("gameboard");
+      let paintVal = null, startIdx = -1, moved = false, holdTimer = 0;
+      const cellAt = (e) => {
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        return el && el.classList && el.classList.contains("cell") ? cells.indexOf(el) : -1;
+      };
+      board.addEventListener("pointerdown", (e) => {
+        const i = cellAt(e);
+        if (i < 0) return;
+        e.preventDefault();
+        if (charMode) clearCharMode();
+        try { board.setPointerCapture(e.pointerId); } catch { /* pointer may already be gone */ }
+        startIdx = i; moved = false;
+        paintVal = state.grid[i] ? 0 : 1;
+        setCell(i, paintVal);
+        scheduleIdleUpdate();
+        holdTimer = setTimeout(() => { paintVal = null; clearBoard(); buzz(30); setStatus("Gates cleared.", "info"); }, 550);
+      });
+      board.addEventListener("pointermove", (e) => {
+        if (paintVal === null) return;
+        const i = cellAt(e);
+        if (i >= 0 && i !== startIdx) {
+          if (!moved) { moved = true; clearTimeout(holdTimer); }
+          if (state.grid[i] !== paintVal) { setCell(i, paintVal); scheduleIdleUpdate(); }
+        }
+      });
+      const endPaint = () => { clearTimeout(holdTimer); paintVal = null; startIdx = -1; };
+      board.addEventListener("pointerup", endPaint);
+      board.addEventListener("pointercancel", endPaint);
+    }
+
+    /* ============================= matrix rain ============================ */
+    // Canvas, opaque, frame-skipped (~30fps playing, ~15fps idle), paused when
+    // hidden or scrolled offscreen — the battery matters more than the 60fps.
+    const rain = (() => {
+      const canvas = $("rainCanvas");
+      const ctx = canvas.getContext("2d", { alpha: false });
+      const PITCH_X = 14, PITCH_Y = 16;
+      let cols = [], W = 0, H = 0;
+      let bits = "0", reveal = 1, mode = "idle", level = 0, dirty = true, last = 0, frameNo = 0;
+      let onscreen = true;
+      new IntersectionObserver((es) => { onscreen = es[0].isIntersecting; }).observe(canvas);
+
+      function resize() {
+        const dpr = Math.min(2, window.devicePixelRatio || 1);
+        W = canvas.clientWidth; H = canvas.clientHeight;
+        canvas.width = Math.max(1, W * dpr);
+        canvas.height = Math.max(1, H * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        cols = Array.from({ length: Math.max(1, Math.floor(W / PITCH_X)) }, (_, i) => ({
+          y: Math.random() * H,
+          v: 26 + Math.random() * 46,
+          seed: (i * 97) % 8192,
+        }));
+        ctx.fillStyle = "#020403";
+        ctx.fillRect(0, 0, W, H);
+        dirty = true;
+      }
+
+      function drawStatic() {
+        dirty = false;
+        ctx.fillStyle = "#020403";
+        ctx.fillRect(0, 0, W, H);
+        ctx.font = '11px "JetBrains Mono", ui-monospace, monospace';
+        const perRow = Math.max(1, Math.floor((W - 12) / 9));
+        const rows = Math.max(1, Math.floor((H - 10) / 14));
+        outer: for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < perRow; c++) {
+            const i = r * perRow + c;
+            if (i >= bits.length) break outer;
+            const revealed = i / bits.length < reveal;
+            ctx.fillStyle = revealed ? (bits[i] === "1" ? "#34d399" : "#f87171") : "#3f3f46";
+            ctx.fillText(revealed ? bits[i] : "·", 6 + c * 9, 16 + r * 14);
+          }
+        }
+      }
+
+      function frame(t) {
+        requestAnimationFrame(frame);
+        frameNo++;
+        if (document.hidden || !onscreen) { last = t; return; }
+        if (reducedMotion || mode === "done") { if (dirty) drawStatic(); return; }
+        if (frameNo % (mode === "playing" ? 2 : 4)) return;
+        const dt = Math.min(0.1, (t - last) / 1000 || 0);
+        last = t;
+        const speed = 1 + level * 5;
+        ctx.fillStyle = "rgba(2,4,3,0.2)";
+        ctx.fillRect(0, 0, W, H);
+        ctx.font = '12px "JetBrains Mono", ui-monospace, monospace';
+        const rowCount = Math.max(1, Math.ceil(H / PITCH_Y));
+        cols.forEach((col, ci) => {
+          col.y += col.v * speed * dt;
+          const row = Math.floor(col.y / PITCH_Y);
+          const idx = (col.seed + row) % bits.length;
+          const revealed = idx / bits.length < reveal;
+          ctx.fillStyle = revealed ? (bits[idx] === "1" ? "#34d399" : "#f87171") : "#3f3f46";
+          ctx.globalAlpha = revealed ? 0.95 : 0.3;
+          ctx.fillText(revealed ? bits[idx] : "·", ci * PITCH_X + 3, (row % rowCount) * PITCH_Y + 12);
+          ctx.globalAlpha = 1;
+        });
+      }
+
+      resize();
+      window.addEventListener("resize", resize);
+      requestAnimationFrame(frame);
+      return {
+        setBits(u8OrString) {
+          bits = typeof u8OrString === "string" ? (u8OrString || "0") : toBits(u8OrString);
+          dirty = true;
+        },
+        setMode(m) { mode = m; dirty = true; },
+        setReveal(x) { const r = clamp01(x); if (r !== reveal) { reveal = r; dirty = true; } },
+        setLevel(x) { level = x; },
+      };
+    })();
+
+    /* ============================ idle display ============================ */
+    function currentDisplayLabel() {
+      const i = currentInput();
+      return i.label || DEFAULT_LABEL;
+    }
+    function updateIdleDisplay() {
+      if (state.session) return;
+      renderHeader(gridXorString(currentDisplayLabel()));
+      if (state.result) return; // keep a finished dump on screen
+      const i = currentInput();
+      const bytes = i.bytes.length ? applyGridBytes(i.bytes) : ENC.encode("GSL·" + DEFAULT_LABEL.toUpperCase().replaceAll(" ", "·") + "·");
+      rain.setBits(bytes);
+      rain.setMode("idle");
+      rain.setReveal(1);
+    }
+
+    /* =============================== typing =============================== */
+    const typingEl = $("typingInput");
+    function liveWpm() {
+      const { start, last } = state.typing;
+      const mins = (last - start) / 60000;
+      const words = state.text.trim() ? state.text.trim().split(/\s+/).length : 0;
+      state.typing.wpm = mins > 0 ? Number((words / mins).toFixed(1)) : 0;
+      $("wpmCounter").textContent = `WPM: ${state.typing.wpm || "—"}`;
+    }
+    function autosize() {
+      typingEl.style.height = "auto";
+      typingEl.style.height = `${Math.min(typingEl.scrollHeight, 200)}px`;
+    }
+    typingEl.addEventListener("input", () => {
+      const now = performance.now();
+      if (!state.typing.start) state.typing.start = now;
+      state.typing.last = now;
+      state.text = typingEl.value;
+      state.result = null;
+      liveWpm();
+      autosize();
+      updateIdleDisplay();
+    });
+    // Desktop QoL: ⌘/Ctrl+Enter fires the encrypt from anywhere.
+    document.addEventListener("keydown", (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !state.session) {
+        e.preventDefault();
+        onEncrypt();
+      }
+    });
+
+    /* ================================ tabs ================================ */
+    function setKind(kind) {
+      state.kind = kind;
+      $("tabText").setAttribute("aria-selected", String(kind === "text"));
+      $("tabFile").setAttribute("aria-selected", String(kind === "file"));
+      typingEl.classList.toggle("hidden", kind !== "text");
+      $("fileZone").classList.toggle("hidden", kind !== "file");
+      updateIdleDisplay();
+    }
+    $("tabText").addEventListener("click", () => setKind("text"));
+    $("tabFile").addEventListener("click", () => setKind("file"));
+
+    /* ============================ message file ============================ */
+    const MAX_FILE = 4 * 1024 * 1024;
+    async function readMessageFile(file) {
+      if (!file) return;
+      if (file.size > MAX_FILE) return setStatus("4 MB max — the rain can only fall so fast.", "err");
+      state.file = { bytes: new Uint8Array(await file.arrayBuffer()), name: file.name, mime: file.type || "application/octet-stream" };
+      state.result = null;
+      $("fileChipLabel").textContent = `${file.name} · ${(file.size / 1024).toFixed(1)} KB`;
+      $("fileChip").classList.remove("hidden");
+      $("fileChip").classList.add("flex");
+      updateIdleDisplay();
+      setStatus(`${file.name} loaded — ${state.file.bytes.length} bytes ready to chop.`, "ok");
+    }
+    $("fileDrop").addEventListener("click", () => $("msgFileInput").click());
+    $("msgFileInput").addEventListener("change", (e) => { readMessageFile(e.target.files[0]); e.target.value = ""; });
+    $("fileDrop").addEventListener("dragover", (e) => { e.preventDefault(); e.currentTarget.classList.add("border-emerald-500/50"); });
+    $("fileDrop").addEventListener("dragleave", (e) => e.currentTarget.classList.remove("border-emerald-500/50"));
+    $("fileDrop").addEventListener("drop", (e) => {
+      e.preventDefault();
+      e.currentTarget.classList.remove("border-emerald-500/50");
+      readMessageFile(e.dataTransfer.files[0]);
+    });
+    $("fileClear").addEventListener("click", () => {
+      state.file = null;
+      $("fileChip").classList.add("hidden");
+      $("fileChip").classList.remove("flex");
+      updateIdleDisplay();
+    });
+
+    /* ============================= custom .mid ============================ */
+    $("loadMidiButton").addEventListener("click", () => $("midiFileInput").click());
+    $("midiFileInput").addEventListener("change", async (e) => {
+      const f = e.target.files[0];
+      e.target.value = "";
+      if (!f) return;
+      try {
+        const song = await songFromBytes(new Uint8Array(await f.arrayBuffer()), "custom", f.name);
+        if (song.keystream.length < 3) throw new Error("no notes found");
+        state.customSong = song;
+        let opt = $("songNumber").querySelector('option[value="custom"]');
+        if (!opt) {
+          opt = document.createElement("option");
+          opt.value = "custom";
+          $("songNumber").appendChild(opt);
+        }
+        opt.textContent = `Your file: ${f.name}`;
+        $("songNumber").value = "custom";
+        setStatus(`${f.name} parsed — ${song.keystream.length} keystream bytes.`, "ok");
+      } catch (err) {
+        setStatus(`Couldn't parse that .mid (${err.message}).`, "err");
+      }
+    });
+
+    /* =========================== playback engine ========================== */
+    function createSession(song, input) {
+      const transport = Tone.getTransport();
+      const draw = Tone.getDraw();
+      transport.stop();
+      transport.cancel(0);
+      transport.seconds = 0;
+
+      // v1 nested `oscillator` inside `envelope`, so it never applied.
+      const synth = new Tone.PolySynth(Tone.Synth, {
+        oscillator: { type: "sine" },
+        envelope: { attack: 0.03, decay: 0.1, sustain: 0.4, release: 0.8 },
+      });
+      synth.maxPolyphony = 96; // chords in the dense songs blew the default and dropped notes
+      synth.volume.value = -9;
+      const analyser = new Tone.Analyser("waveform", 256);
+      synth.chain(analyser, Tone.getDestination());
+
+      const notes = [];
+      song.midi.tracks.forEach((t) => t.notes.forEach((n) => notes.push(n)));
+      notes.sort((a, b) => a.time - b.time || a.midi - b.midi);
+      const duration = song.midi.duration || (notes.length ? notes[notes.length - 1].time + 1 : 1);
+
+      const noteQueue = [];
+      let prevTime = -1, clump = 0;
+      notes.forEach((n) => {
+        // Sub-tick spread: simultaneous chord notes get deterministic micro-
+        // offsets so they don't exhaust the voice pool at a single instant.
+        if (Math.abs(n.time - prevTime) < 1e-6) clump++; else { clump = 0; prevTime = n.time; }
+        transport.schedule((time) => {
+          synth.triggerAttackRelease(n.name, Math.max(n.duration, 0.05), time, n.velocity || 0.7);
+          draw.schedule(() => noteQueue.push(n), time);
+        }, n.time + clump * 1e-4);
+      });
+      transport.scheduleOnce((time) => draw.schedule(() => api.end(false), time), duration + 0.35);
+
+      let disposed = false, rafId = 0, shownSec = -1;
+      const label = input.label || DEFAULT_LABEL;
+      function tick() {
+        rafId = requestAnimationFrame(tick);
+        const sec = Math.min(transport.seconds, duration);
+        $("progressFill").style.transform = `scaleX(${clamp01(sec / duration)})`;
+        const s0 = Math.floor(sec);
+        if (s0 !== shownSec) { shownSec = s0; $("timeLabel").textContent = `${fmtTime(sec)} / ${fmtTime(duration)}`; }
+        rain.setReveal(sec / duration);
+        const buf = analyser.getValue();
+        let sum = 0;
+        for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+        const rms = Math.sqrt(sum / buf.length) || 0;
+        rain.setLevel(rms);
+        $("levelMeter").style.transform = `scaleX(${Math.min(1, rms * 2.6)})`;
+        if (noteQueue.length) {
+          const seen = noteQueue.splice(0, noteQueue.length);
+          seen.slice(-10).forEach((n) => { const c = n.midi % 64; flashCell(c); setCell(c, !state.grid[c]); });
+          renderHeader(noteXorString(label, seen[seen.length - 1].name));
+        }
+      }
+
+      const api = {
+        duration,
+        start() { transport.start("+0.05"); tick(); },
+        pause() { transport.pause(); },
+        resume() { transport.start(); },
+        seek(frac) { transport.seconds = clamp01(frac) * duration; },
+        get playing() { return transport.state === "started"; },
+        end(manual) {
+          if (disposed) return;
+          disposed = true;
+          cancelAnimationFrame(rafId);
+          // The full disconnect: transport cleared, voices released, then the
+          // synth/analyser leave the graph once their tails fade.
+          transport.stop();
+          transport.cancel(0);
+          synth.releaseAll();
+          setTimeout(() => { synth.dispose(); analyser.dispose(); }, 300);
+          rain.setLevel(0);
+          $("levelMeter").style.transform = "scaleX(0)";
+          state.session = null;
+          manual ? onAborted() : onComplete();
+        },
+      };
+      return api;
+    }
+
+    /* ============================== UI modes ============================== */
+    function enterPlayingUI(song) {
+      $("nowPlaying").textContent = song.title;
+      $("transportPanel").classList.remove("hidden");
+      $("progressFill").style.transform = "scaleX(0)";
+      ["typingInput", "songNumber", "loadMidiButton", "tabText", "tabFile"].forEach((id) => ($(id).disabled = true));
+      $("encryptButton").disabled = true;
+      $("pauseButton").classList.remove("hidden");
+      $("pauseButton").textContent = "Pause";
+      $("stopButton").classList.remove("hidden");
+      $("downloadButton").classList.add("hidden");
+      $("results").classList.add("hidden");
+      $("qrSection").classList.add("hidden");
+      headerEl.classList.add("playing");
+    }
+    function exitPlayingUI() {
+      ["typingInput", "songNumber", "loadMidiButton", "tabText", "tabFile"].forEach((id) => ($(id).disabled = false));
+      $("encryptButton").disabled = false;
+      $("pauseButton").classList.add("hidden");
+      $("stopButton").classList.add("hidden");
+      headerEl.classList.remove("playing");
+    }
+
+    async function resolveSong(sel) {
+      if (sel === "custom") return state.customSong;
+      return loadBuiltinSong(sel);
+    }
+
+    async function onEncrypt() {
+      if (state.session) return;
+      const input = currentInput();
+      if (!input.bytes.length) return setStatus("Type a message or load a file first.", "err");
+      const sel = $("songNumber").value;
+      if (!sel) return setStatus("Choose a song — the song is the key.", "err");
+      liveWpm();
+      clearCharMode();
+      try {
+        setStatus("Loading song…");
+        const song = await resolveSong(sel);
+        if (!song) return setStatus("Load a .mid first.", "err");
+        state.song = song;
+        await Tone.start(); // the click is the user gesture that unlocks audio
+        // The dump is deterministic — compute it up front; playback reveals it.
+        const bits = xorBytes(input.bytes, song.keystream);
+        state.result = { input, song, bits };
+        rain.setBits(bits);
+        rain.setReveal(0);
+        rain.setMode("playing");
+        state.session = createSession(song, input);
+        enterPlayingUI(song);
+        state.session.start();
+        setStatus(`Playing ${song.title} — keystream engaged, ${song.keystream.length} bytes cycling.`, "ok");
+      } catch (e) {
+        console.error(e);
+        exitPlayingUI();
+        setStatus(`Could not start: ${e.message}`, "err");
+      }
+    }
+
+    function onComplete() {
+      exitPlayingUI();
+      $("progressFill").style.transform = "scaleX(1)";
+      rain.setReveal(1);
+      rain.setMode("done");
+      const { input } = state.result;
+      const b64 = toB64(input.bytes);
+      $("resultsText").value = b64.length > 2000 ? `${b64.slice(0, 2000)}… (+${b64.length - 2000} chars)` : b64;
+      $("results").classList.remove("hidden");
+      $("downloadButton").classList.remove("hidden");
+      $("encryptButton").textContent = "Replay";
+      renderHeader(gridXorString(currentDisplayLabel()));
+      setStatus("Song dumped · audio graph disconnected · .slayy ready.", "ok");
+      showShareQr();
+    }
+    function onAborted() {
+      exitPlayingUI();
+      state.result = null;
+      rain.setMode("idle");
+      updateIdleDisplay();
+      setStatus("Stopped — nothing dumped.");
+    }
+
+    $("encryptButton").addEventListener("click", onEncrypt);
+    $("pauseButton").addEventListener("click", () => {
+      const s = state.session;
+      if (!s) return;
+      if (s.playing) {
+        s.pause();
+        $("pauseButton").textContent = "Resume";
+        setStatus("Paused — the transport holds its ticks.");
+      } else {
+        s.resume();
+        $("pauseButton").textContent = "Pause";
+        setStatus("Rolling again.", "ok");
+      }
+    });
+    $("stopButton").addEventListener("click", () => state.session && state.session.end(true));
+
+    // Drag-to-scrub, pointer-captured so fingers can wander off the bar.
+    {
+      const bar = $("progressBar");
+      let scrubbing = false;
+      const seekEv = (e) => {
+        const s = state.session;
+        if (!s) return;
+        const r = bar.getBoundingClientRect();
+        s.seek((e.clientX - r.left) / r.width);
+      };
+      bar.addEventListener("pointerdown", (e) => { scrubbing = true; try { bar.setPointerCapture(e.pointerId); } catch { /* pointer may already be gone */ } seekEv(e); });
+      bar.addEventListener("pointermove", (e) => scrubbing && seekEv(e));
+      bar.addEventListener("pointerup", () => (scrubbing = false));
+      bar.addEventListener("pointercancel", () => (scrubbing = false));
+    }
+
+    /* ============================ .slayy build ============================ */
+    function buildSvg(bitBytes, meta) {
+      const PER = 8, LINES = 30; // 8 bytes = 64 bits per line
+      const shown = Math.min(bitBytes.length, PER * LINES);
+      let rows = "";
+      for (let li = 0; li * PER < shown; li++) {
+        const slice = bitBytes.subarray(li * PER, Math.min((li + 1) * PER, shown));
+        let line = "";
+        for (const b of slice) line += b.toString(2).padStart(8, "0");
+        const y = 40 + li * 17;
+        // Two overlaid monospace layers: red zeros, green ones, spaces filling
+        // the other's positions so the columns line up.
+        rows += `<text x="24" y="${y}" xml:space="preserve" fill="#f87171">${line.replace(/1/g, " ")}</text>`
+              + `<text x="24" y="${y}" xml:space="preserve" fill="#34d399">${line.replace(/0/g, " ")}</text>`;
+      }
+      const more = bitBytes.length > shown
+        ? `<text x="24" y="${40 + Math.ceil(shown / PER) * 17 + 6}" fill="#52525b">+${bitBytes.length - shown} bytes sealed below</text>`
+        : "";
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600" font-family="Menlo, Consolas, monospace" font-size="11" letter-spacing="1">
+<rect width="600" height="600" fill="#050505"/>
+<text x="24" y="22" fill="#10b981" font-size="10" letter-spacing="3">GSL·SLAYY·V2 — ${escXml(meta.songTitle)}</text>
+${rows}${more}
+<!-- SHA-256: ${meta.bitsSha256} -->
+<!-- MIDI: ${escXml(meta.songTitle)} (${meta.midiSha256.slice(0, 16)}…) -->
+<!-- WPM: ${meta.wpm} -->
+</svg>`;
+    }
+
+    async function buildMeta() {
+      const { input, song, bits } = state.result || {};
+      if (!bits) throw new Error("nothing dumped yet — play a song first");
+      const inner = { kind: input.kind, name: input.name, mime: input.mime, wpm: state.typing.wpm, dataB64: toB64(input.bytes) };
+      const sealed = await seal(inner);
+      return {
+        v: 2, alg: "AES-256-GCM", kdf: "PBKDF2-SHA256", iter: PBKDF2_ITER,
+        ...sealed,
+        song: song.id, songTitle: song.title, midiSha256: song.sha256,
+        bitsSha256: await sha256Hex(bits),
+        kind: input.kind, len: input.bytes.length, wpm: state.typing.wpm,
+        created: new Date().toISOString(),
+      };
+    }
+
+    async function buildSlayy() {
+      const meta = await buildMeta();
+      const { input } = state.result;
+      const content = `${buildSvg(state.result.bits, meta)}\n<!--SLAYY2:${toB64(ENC.encode(JSON.stringify(meta)))}-->\n`;
+      const stem = input.kind === "file"
+        ? (input.name || "").replace(/\.[^.]*$/, "")
+        : (state.text.trim().split(/\s+/)[0] || "");
+      const filename = `${(stem.replace(/[^a-z0-9_-]/gi, "_").slice(0, 40)) || "gaslighting"}.slayy`;
+      return { filename, content };
+    }
+
+    async function buildShareUrl() {
+      const meta = await buildMeta();
+      const payload = toB64url(ENC.encode(JSON.stringify(meta)));
+      return { url: `${location.origin}${location.pathname}#s=${payload}`, payload, meta };
+    }
+
+    function saveBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = Object.assign(document.createElement("a"), { href: url, download: filename });
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }
+
+    $("downloadButton").addEventListener("click", async () => {
+      try {
+        const { filename, content } = await buildSlayy();
+        saveBlob(new Blob([content], { type: "text/plain;charset=utf-8" }), filename);
+        setStatus(`Saved ${filename} — pair it with the song to get the bytes back.`, "ok");
+      } catch (e) {
+        setStatus(e.message, "err");
+      }
+    });
+    $("copyResults").addEventListener("click", async () => {
+      if (!state.result) return;
+      try {
+        await navigator.clipboard.writeText(toB64(state.result.input.bytes));
+        setStatus("Base64 copied.", "ok");
+      } catch {
+        setStatus("Clipboard unavailable — select and copy manually.", "err");
+      }
+    });
+
+    /* ============================== syzygy QR ============================= */
+    // qrcode-generator does the heavy lifting (Reed–Solomon EC level M).
+    // Art mode paints the dark modules as keystream bits with a Perlin
+    // shimmer; a tap flips to guaranteed-scannable black-on-white.
+    const qrCanvas = $("qrCanvas");
+    let qrState = null;
+
+    function buildQr(text, bitsStr) {
+      const qr = qrcode(0, "M"); // type 0 = auto version
+      qr.addData(text, "Byte");
+      qr.make();
+      const count = qr.getModuleCount();
+      const mods = new Uint8Array(count * count);
+      for (let r = 0; r < count; r++) for (let c = 0; c < count; c++) mods[r * count + c] = qr.isDark(r, c) ? 1 : 0;
+      qrState = { url: text, count, mods, bits: bitsStr || "10", mode: "syzygy", shimmerUntil: performance.now() + 8000 };
+      $("qrModeLabel").textContent = "art mode";
+      renderQr(performance.now() / 1000);
+      startShimmer();
+    }
+
+    function renderQr(t = 0, fall = 0) {
+      const q = qrState;
+      if (!q) return;
+      const quiet = 4;
+      const total = q.count + quiet * 2;
+      const cssSize = Math.min(300, Math.floor(window.innerWidth * 0.78));
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const scale = Math.max(2, Math.floor((cssSize * dpr) / total));
+      const px = scale * total;
+      if (qrCanvas.width !== px) {
+        qrCanvas.width = qrCanvas.height = px;
+        qrCanvas.style.width = qrCanvas.style.height = `${px / dpr}px`;
+      }
+      const ctx = qrCanvas.getContext("2d");
+      ctx.imageSmoothingEnabled = false;
+      if (q.mode === "share") {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, px, px);
+        ctx.fillStyle = "#000000";
+        for (let r = 0; r < q.count; r++) {
+          for (let c = 0; c < q.count; c++) {
+            if (q.mods[r * q.count + c]) ctx.fillRect((c + quiet) * scale, (r + quiet) * scale, scale, scale);
+          }
+        }
+        return;
+      }
+      // art mode
+      ctx.fillStyle = "#050505";
+      ctx.fillRect(0, 0, px, px);
+      const inset = Math.max(1, Math.floor(scale * 0.18));
+      for (let r = 0; r < q.count; r++) {
+        for (let c = 0; c < q.count; c++) {
+          if (!q.mods[r * q.count + c]) continue;
+          const n = perlin(c * 0.35 + t * 0.6, r * 0.35);
+          let y = (r + quiet) * scale;
+          let alpha = 0.55 + 0.45 * n;
+          if (fall > 0) { // breakdown: modules stream downward through the noise
+            y += fall * fall * px * (0.4 + n);
+            alpha *= 1 - fall;
+            if (y > px) continue;
+          }
+          const bit = q.bits[(r * q.count + c) % q.bits.length];
+          ctx.fillStyle = bit === "1" ? "#34d399" : "#f87171";
+          ctx.globalAlpha = alpha;
+          ctx.fillRect((c + quiet) * scale + inset, Math.round(y) + inset, scale - inset * 2, scale - inset * 2);
+        }
+      }
+      ctx.globalAlpha = 1;
+      if (fall === 0) {
+        // syzygy: the three finder constellations get aligned orbit rings
+        ctx.strokeStyle = "rgba(52, 211, 153, 0.35)";
+        ctx.lineWidth = Math.max(1, scale * 0.3);
+        const ring = (mr, mc) => {
+          ctx.beginPath();
+          ctx.arc((mc + quiet + 3.5) * scale, (mr + quiet + 3.5) * scale, scale * 4.6, 0, Math.PI * 2);
+          ctx.stroke();
+        };
+        ring(0, 0);
+        ring(0, q.count - 7);
+        ring(q.count - 7, 0);
+      }
+    }
+
+    let shimmerRaf = 0, shimmerFrame = 0;
+    function startShimmer() {
+      cancelAnimationFrame(shimmerRaf);
+      if (reducedMotion) return;
+      const loop = (now) => {
+        if (!qrState || qrState.mode !== "syzygy" || now > qrState.shimmerUntil || document.hidden) return;
+        shimmerRaf = requestAnimationFrame(loop);
+        if (++shimmerFrame % 5) return; // ~12fps is plenty for a shimmer
+        renderQr(now / 1000);
+      };
+      shimmerRaf = requestAnimationFrame(loop);
+    }
+
+    function toggleQrMode() {
+      if (!qrState) return;
+      qrState.mode = qrState.mode === "syzygy" ? "share" : "syzygy";
+      $("qrModeLabel").textContent = qrState.mode === "share" ? "scannable" : "art mode";
+      buzz(8);
+      if (qrState.mode === "syzygy") {
+        qrState.shimmerUntil = performance.now() + 8000;
+        renderQr(performance.now() / 1000);
+        startShimmer();
+      } else {
+        renderQr(0);
+      }
+    }
+
+    function saveQrPng() {
+      if (!qrState) return;
+      // Always export the scannable form, big and crisp.
+      const quiet = 4, scale = 8, total = qrState.count + quiet * 2;
+      const c = document.createElement("canvas");
+      c.width = c.height = total * scale;
+      const x = c.getContext("2d");
+      x.fillStyle = "#ffffff";
+      x.fillRect(0, 0, c.width, c.height);
+      x.fillStyle = "#000000";
+      for (let r = 0; r < qrState.count; r++) {
+        for (let cc = 0; cc < qrState.count; cc++) {
+          if (qrState.mods[r * qrState.count + cc]) x.fillRect((cc + quiet) * scale, (r + quiet) * scale, scale, scale);
+        }
+      }
+      c.toBlob((blob) => blob && saveBlob(blob, "gsl-share-qr.png"), "image/png");
+      setStatus("QR saved as PNG — scannable black-on-white.", "ok");
+    }
+
+    {
+      let holdTimer = 0, held = false;
+      qrCanvas.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        held = false;
+        holdTimer = setTimeout(() => { held = true; saveQrPng(); buzz(20); }, 600);
+      });
+      qrCanvas.addEventListener("pointerup", () => {
+        clearTimeout(holdTimer);
+        if (!held) toggleQrMode();
+      });
+      qrCanvas.addEventListener("pointercancel", () => clearTimeout(holdTimer));
+      qrCanvas.addEventListener("pointerleave", () => clearTimeout(holdTimer));
+    }
+    $("saveQrButton").addEventListener("click", saveQrPng);
+    $("copyLinkButton").addEventListener("click", async () => {
+      if (!qrState) return;
+      try {
+        await navigator.clipboard.writeText(qrState.url);
+        setStatus("Share link copied — anyone who opens it watches the decryption.", "ok");
+      } catch {
+        setStatus("Clipboard unavailable.", "err");
+      }
+    });
+
+    async function showShareQr() {
+      try {
+        const { url } = await buildShareUrl();
+        if (url.length > 1500) {
+          $("qrSection").classList.add("hidden");
+          setStatus("Dump ready — payload too large for a QR; share the .slayy file instead.", "ok");
+          return;
+        }
+        buildQr(url, toBits(state.result.bits, 2048));
+        $("qrSection").classList.remove("hidden");
+      } catch {
+        $("qrSection").classList.add("hidden");
+      }
+    }
+
+    /* ============================= decompile ============================== */
+    // Untrusted files land in the DOM here, so the SVG gets scrubbed first.
+    function mountSvg(container, svgText) {
+      container.textContent = "";
+      try {
+        const doc = new DOMParser().parseFromString(svgText, "image/svg+xml");
+        const svg = doc.documentElement;
+        if (svg.nodeName.toLowerCase() !== "svg" || doc.querySelector("parsererror")) return;
+        svg.querySelectorAll("script, foreignObject").forEach((n) => n.remove());
+        for (const el of [svg, ...svg.querySelectorAll("*")]) {
+          for (const a of [...el.attributes]) {
+            if (/^on/i.test(a.name) || /javascript:/i.test(a.value)) el.removeAttribute(a.name);
+          }
+        }
+        container.appendChild(document.importNode(svg, true));
+      } catch { /* preview is optional; the payload is what matters */ }
+    }
+
+    function renderDecoded(inner, bytes) {
+      const out = $("decodedOut");
+      out.textContent = "";
+      if (inner.kind === "file") {
+        const blob = new Blob([bytes], { type: inner.mime || "application/octet-stream" });
+        const url = URL.createObjectURL(blob);
+        const a = Object.assign(document.createElement("a"), { href: url, download: inner.name || "decoded.bin" });
+        a.textContent = `↓ ${inner.name || "decoded.bin"} · ${bytes.length} bytes (lossless)`;
+        a.className = "text-emerald-400 underline underline-offset-2 hover:text-emerald-300";
+        out.appendChild(a);
+        if ((inner.mime || "").startsWith("image/")) {
+          const img = new Image();
+          img.src = url;
+          img.alt = inner.name || "decoded image";
+          img.className = "mt-3 max-h-48 rounded-lg border border-neutral-800";
+          out.appendChild(img);
+        }
+      } else {
+        const pre = document.createElement("pre");
+        pre.textContent = DEC.decode(bytes);
+        pre.className = "max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border border-neutral-800 bg-neutral-900/70 p-3 text-emerald-100";
+        out.appendChild(pre);
+      }
+    }
+
+    let pendingCrossCheck = null;
+    async function crossCheckInfo(meta, bytes, song = null) {
+      const wpmNote = meta.wpm ? ` · typed at ${meta.wpm} WPM` : "";
+      if (meta.song === "custom") {
+        $("provideMidiButton").classList.remove("hidden");
+        pendingCrossCheck = { meta, bytes };
+        return `Seal opened ✓ · custom song — the .mid is the key; provide it to cross-check${wpmNote}`;
+      }
+      try {
+        song = song || await loadBuiltinSong(meta.song);
+        const ok = song.sha256 === meta.midiSha256
+          && (await sha256Hex(xorBytes(bytes, song.keystream))) === meta.bitsSha256;
+        return ok
+          ? `Seal opened ✓ · keystream cross-check ✓ — ${meta.songTitle} reproduces the embedded bits${wpmNote}`
+          : `Seal opened ✓ · keystream cross-check ✗ — the bits don't match ${meta.songTitle}${wpmNote}`;
+      } catch {
+        return `Seal opened ✓ · cross-check skipped (couldn't fetch ${meta.songTitle})${wpmNote}`;
+      }
+    }
+
+    async function decompileText(text) {
+      const panel = $("decompilePanel");
+      panel.classList.remove("hidden");
+      const vLine = $("verifyLine");
+      $("decodedOut").textContent = "";
+      vLine.textContent = "";
+      $("provideMidiButton").classList.add("hidden");
+      pendingCrossCheck = null;
+
+      const m = text.match(/<!--SLAYY2:([A-Za-z0-9+/=]+)-->/);
+      if (!m) {
+        $("svgContainer").textContent = "";
+        vLine.textContent = text.includes("<svg")
+          ? "Legacy .slayy — the v1 (CryptoJS-era) format is retired and can't be opened here."
+          : "Unrecognized file — no SLAYY2 payload found.";
+        return null;
+      }
+      let meta;
+      try {
+        meta = JSON.parse(DEC.decode(fromB64(m[1])));
+        if (meta.v !== 2) throw new Error(`unsupported version ${meta.v}`);
+      } catch (e) {
+        vLine.textContent = `Corrupt payload (${e.message}).`;
+        return null;
+      }
+      mountSvg($("svgContainer"), text.slice(0, m.index).trim());
+
+      let inner;
+      try {
+        inner = await openSeal(meta);
+      } catch {
+        vLine.textContent = "AES-GCM seal refused to open — the file was tampered with or is foreign.";
+        return null;
+      }
+      const bytes = fromB64(inner.dataB64);
+      renderDecoded(inner, bytes);
+      vLine.textContent = await crossCheckInfo(meta, bytes);
+      return { meta, inner, bytes };
+    }
+
+    $("decompileButton").addEventListener("click", () => $("slayyFileInput").click());
+    $("slayyFileInput").addEventListener("change", async (e) => {
+      const f = e.target.files[0];
+      e.target.value = "";
+      if (f) decompileText(await f.text());
+    });
+    $("provideMidiButton").addEventListener("click", () => $("crosscheckMidiInput").click());
+    $("crosscheckMidiInput").addEventListener("change", async (e) => {
+      const f = e.target.files[0];
+      e.target.value = "";
+      if (!f || !pendingCrossCheck) return;
+      const { meta, bytes: data } = pendingCrossCheck;
+      const midiBytes = new Uint8Array(await f.arrayBuffer());
+      if ((await sha256Hex(midiBytes)) !== meta.midiSha256) {
+        $("verifyLine").textContent = "That .mid is not the key — SHA-256 mismatch.";
+        return;
+      }
+      const song = await songFromBytes(midiBytes, "custom", f.name);
+      const ok = (await sha256Hex(xorBytes(data, song.keystream))) === meta.bitsSha256;
+      $("verifyLine").textContent = ok
+        ? `Keystream cross-check ✓ — ${f.name} is the key and reproduces the bits.`
+        : "SHA-256 matched but the bits diverge — parser drift?";
+    });
+
+    /* ===================== incoming QR transmissions ====================== */
+    // A scanned share-QR opens this page with #s=<payload>. The code appears
+    // on screen, breaks down through the binary rain, and the 64 cells spell
+    // the message out — tap anywhere to skip the theater.
+    function tweenReveal(skip, ms) {
+      return new Promise((resolve) => {
+        const t0 = performance.now();
+        const f = (t) => {
+          const k = clamp01((t - t0) / ms);
+          rain.setReveal(k);
+          if (k >= 1 || skip.on) { rain.setReveal(1); resolve(); }
+          else requestAnimationFrame(f);
+        };
+        requestAnimationFrame(f);
+      });
+    }
+    function qrBreakdown(skip) {
+      return new Promise((resolve) => {
+        if (skip.on || !qrState) return resolve();
+        const t0 = performance.now(), ms = 1100;
+        const f = (t) => {
+          const k = clamp01((t - t0) / ms);
+          renderQr(t / 1000, k);
+          if (k >= 1 || skip.on) resolve();
+          else requestAnimationFrame(f);
+        };
+        requestAnimationFrame(f);
+      });
+    }
+    function gridSpell(text, skip) {
+      return new Promise((resolve) => {
+        charMode = true;
+        const chars = [...text];
+        const shown = chars.length <= 64 ? chars : [...chars.slice(0, 63), "…"];
+        const pad = Math.floor((64 - shown.length) / 2);
+        cells.forEach((c) => { c.classList.remove("on", "flash"); c.classList.add("char"); c.textContent = ""; });
+        const apply = (idx) => {
+          const ci = idx - pad;
+          cells[idx].textContent = ci >= 0 && ci < shown.length ? printable(shown[ci]) : "";
+        };
+        const order = [...Array(64).keys()]
+          .sort((a, b) => perlin((a % 8) * 0.61, Math.floor(a / 8) * 0.61) - perlin((b % 8) * 0.61, Math.floor(b / 8) * 0.61));
+        let k = 0;
+        const step = () => {
+          if (skip.on) { for (; k < 64; k++) apply(order[k]); }
+          else apply(order[k++]);
+          if (k >= 64) return resolve();
+          setTimeout(step, 18);
+        };
+        step();
+      });
+    }
+
+    async function handleIncomingHash() {
+      const m = (location.hash || "").match(/[#&]s=([A-Za-z0-9_-]+)/);
+      if (!m) return;
+      const payload = m[1];
+      history.replaceState(null, "", location.pathname + location.search);
+      let meta;
+      try {
+        meta = JSON.parse(DEC.decode(fromB64url(payload)));
+        if (meta.v !== 2) throw new Error("version");
+      } catch {
+        setStatus("Incoming payload unreadable — not a GSL transmission.", "err");
+        return;
+      }
+      setStatus("Incoming transmission — opening the seal…", "ok");
+      try {
+        buildQr(`${location.origin}${location.pathname}#s=${payload}`, toBits(ENC.encode(payload), 1024));
+        $("qrSection").classList.remove("hidden");
+      } catch { /* art layer only */ }
+
+      let inner, bytes;
+      try {
+        inner = await openSeal(meta);
+        bytes = fromB64(inner.dataB64);
+      } catch {
+        setStatus("AES-GCM seal refused to open — transmission corrupt.", "err");
+        return;
+      }
+      let song = null;
+      if (meta.song !== "custom") {
+        try { song = await loadBuiltinSong(meta.song); } catch { /* offline: art falls back to raw bytes */ }
+      }
+      const bits = song ? xorBytes(bytes, song.keystream) : bytes;
+
+      const skip = { on: reducedMotion };
+      const skipOn = () => (skip.on = true);
+      addEventListener("pointerdown", skipOn);
+      await qrBreakdown(skip);
+      rain.setBits(bits);
+      rain.setReveal(0);
+      rain.setMode("playing");
+      await tweenReveal(skip, 1600);
+      rain.setMode("done");
+      const text = inner.kind === "text" ? DEC.decode(bytes) : null;
+      if (text) await gridSpell(text, skip);
+      removeEventListener("pointerdown", skipOn);
+
+      if (qrState) { qrState.mode = "syzygy"; renderQr(performance.now() / 1000); }
+      $("decompilePanel").classList.remove("hidden");
+      $("svgContainer").textContent = "";
+      $("provideMidiButton").classList.add("hidden");
+      pendingCrossCheck = null;
+      renderDecoded(inner, bytes);
+      $("verifyLine").textContent = await crossCheckInfo(meta, bytes, song);
+      if (text) renderHeader(text);
+      setStatus(`Transmission decoded — ${meta.songTitle} carried it here.`, "ok");
+    }
+
+    /* ================================ misc ================================ */
+    $("refreshButton").addEventListener("click", () => location.reload());
+
+    /* ================================ init ================================ */
+    buildGrid();
+    renderHeader(DEFAULT_LABEL);
+    updateIdleDisplay();
+    setStatus("The song is the key. Type, choose, play.");
+    handleIncomingHash();
+
+    // Exposed for the console and for automated verification.
+    window.GSL = {
+      state, SONGS,
+      deriveKeystream, xorBytes, sha256Hex, toB64, fromB64, toB64url, fromB64url, toBits, perlin,
+      loadBuiltinSong, songFromBytes, resolveSong,
+      buildMeta, buildSlayy, buildShareUrl, decompileText, currentInput, seal, openSeal,
+      handleIncomingHash, gridSpell,
+      qr: () => qrState,
+    };
+  </script>
 </body>
 </html>
