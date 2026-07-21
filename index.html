@@ -6,9 +6,9 @@
     <title>GSL Encryption</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link rel="stylesheet" type="text/css" href="styles.css">
-    <script src="https://cdn.rawgit.com/eligrey/FileSaver.js/5ed507ef8aa53d8ecfea96d96bc7214cd2476fd2/FileSaver.min.js"></script>
-    <script src="https://cdn.rawgit.com/eligrey/canvas-toBlob.js/f1a01896135ab378aa5c0118eadd81da55e698d8/canvas-toBlob.js"></script>
-    <script src="https://cdn.rawgit.com/eligrey/Blob.js/0cef2746414269b16834878a8abc52eb9d53e6bd/Blob.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/eligrey/FileSaver.js@5ed507ef8aa53d8ecfea96d96bc7214cd2476fd2/FileSaver.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/eligrey/canvas-toBlob.js@f1a01896135ab378aa5c0118eadd81da55e698d8/canvas-toBlob.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/eligrey/Blob.js@0cef2746414269b16834878a8abc52eb9d53e6bd/Blob.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.0.0/crypto-js.min.js"></script>
 <script src="jQueryAssets/jquery-1.11.1.min.js"></script>
     <script src="jQueryAssets/jquery.ui-1.10.4.progressbar.min.js"></script>
@@ -232,9 +232,13 @@
         <div id="matrix" class="matrix mt-8"></div>
     </div>
 
-    <script src="https://unpkg.com/tone@latest"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi"></script>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tone@latest/build/Tone.js"></script>
+    <!-- Explicit UMD build so `Midi` is a real global (the bare /npm/@tonejs/midi
+         entry is a module and left `new Midi(...)` undefined). -->
+    <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi@latest/build/Midi.js"></script>
+    <!-- Removed a second jQuery (3.6.0) that reloaded here and clobbered the
+         jQuery-UI progressbar plugin bound to 1.11.1 above — it was throwing
+         "$(...).progressbar is not a function" on init and taking the tool down. -->
     <script>
         const midiFiles = [
             "https://irp.cdn-website.com/cee417da/audio/Tetris_-_A_Theme.mid",
@@ -349,7 +353,10 @@
             return result;
         }
 
-        function playMIDI(songNumber) {
+        async function playMIDI(songNumber) {
+            // Unlock the AudioContext — the encrypt click is the required user
+            // gesture. Without this, Tone.Transport.start() produced no sound.
+            await Tone.start();
             const midiFile = midiFiles[songNumber - 1];
             document.getElementById("typingInput").disabled = true;
             // Fade out elements not needed during playback
@@ -475,9 +482,10 @@
 const slayyFileContent = `${svgContent}\n<!--${encryptedMessage}-->`;
 const blob = new Blob([slayyFileContent], { type: 'text/plain;charset=utf-8' });
 
-// Save file as `.slayy`
-const binaryMessage = "yourFileName"; // Ensure binaryMessage is defined
+// Save file as `.slayy` — name after the first word of the message.
+const fileName = (currentMessage.trim().split(/\s+/)[0] || "gaslighting").replace(/[^a-z0-9]/gi, "_");
         saveAs(blob, `${fileName}.slayy`);
+});
 
 document.getElementById("decompileButton").addEventListener("click", function () {
     const fileInput = document.createElement('input');
