@@ -50,7 +50,7 @@ loaded on first use, so the initial page is light.
 
 ## Future Ambitions
 
-### No context on what private / public publication these figures are referring to, but with as much as I can fit in these figures
+### The figures are referring to, a seperate part of this project but with as much as I can fit in these figures in terms of future relevence
 
 ![gs_fig1_qr) style="width: 50%; height: auto;"](https://kappa.lol/74KTKm.png)
 
@@ -60,7 +60,7 @@ loaded on first use, so the initial page is light.
 ## Layout
 - The rest of this project is private and in production
 - The production has started in 2023, and is three years in the process
-- The MIDI Project (Above, is just a cool toy to play with until later,
+- The MIDI Project (Above, is just a cool toy to play with until later
 - There are also versions that work with MIDI Synthisizers (AKAI MK, etc)
 
 
