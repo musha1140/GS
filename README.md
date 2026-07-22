@@ -45,6 +45,43 @@ The app can hide a share link inside invisible Unicode characters so it rides
 along in ordinary text. The deeper tool and write up live in a separate repo:
 **[steganographr](https://github.com/musha1140/steganographr)**.
 
+Only Tailwind loads eagerly. Tone, the MIDI parser, and the QR library are lazy
+loaded on first use, so the initial page is light.
+
+## Future Ambitions
+
+### No context on what private / public publication these figures are referring to, but with as much as I can fit in these figures
+
+![gs_fig1_qr) style="width: 50%; height: auto;"](https://kappa.lol/74KTKm.png)
+
+---
+![gs_fig1_architecture](https://kappa.lol/xees8i.png)
+
+## Layout
+- The rest of this project is private and in production
+- The production has started in 2023, and is three years in the process
+- The MIDI Project (Above, is just a cool toy to play with until later,
+- There are also versions that work with MIDI Synthisizers (AKAI MK, etc)
+
+
+
+- `index.html` is the whole app: markup, styles, and one module script.
+- The 11 built in songs are hosted on the project CDN and fetched on demand. [Reprocessed , reverbed, spliced and not in any original form of its prior state)
+
+## License and credit
+
+Concept extends: "Slayy" *nods* in a very standalone, a far less complex version to the NSA's:
+[Ghidra's Sleigh](https://github.com/NationalSecurityAgency/ghidra) 
+
+Mixed with a [Forked version](https://github.com/musha1140/steganographr) of [Neatnik's Stenanographr ](https://source.tube/neatnik/steganographr) 
+
+---
+[Forked version](https://github.com/musha1140/steganographr)
+
+[Slayybit Image Embed](https://slayy1.vercel.app). 
+(4 Year Old basic Least Significant Bit injection)
+
+
 ## Built with
 
 Credit and thanks to the packages this runs on, all loaded from
@@ -57,27 +94,11 @@ Credit and thanks to the packages this runs on, all loaded from
 | [@tailwindcss/browser](https://www.npmjs.com/package/@tailwindcss/browser) | 4.3.3 | Tailwind 4 styling at runtime |
 | [qrcode-generator](https://www.npmjs.com/package/qrcode-generator) | 1.4.4 | QR encoding with Reed Solomon error correction |
 
-Only Tailwind loads eagerly. Tone, the MIDI parser, and the QR library are lazy
-loaded on first use, so the initial page is light.
 
-## Running locally
+Everything else ~~not~~ by Gas-Lighting.
 
-It is a static page. Serve the folder any way you like, for example:
+ ·   The "hey I remember doing that in the early 90s coding projects.
+Due to the use of GPL npms (General Public License node module packages). The sentence below legally can be ignored.
 
-```
-python3 -m http.server 8080
-```
+© 2024 to 2026 Gas-Lighting All Rights Reserved ·  [gas-lighting.com](https://gas-lighting.com)  ·  for obselete code
 
-Then open `http://localhost:8080`.
-
-## Layout
-
-- `index.html` is the whole app: markup, styles, and one module script.
-- The 11 built in songs are hosted on the project CDN and fetched on demand.
-
-## License and credit
-
-Concept extends [Slayybit Image Embed](https://slayy1.vercel.app). "Slayy" nods
-to 'Ghidra's Sleigh'. Everything else is by Gas-Lighting.
-
-© 2024 to 2026 Gas-Lighting · [gas-lighting.com](https://gas-lighting.com)
